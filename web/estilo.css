@@ -88,6 +88,13 @@ table.t th:first-child { background: var(--ln2); z-index: 3; }
 table.t tr.parcial td { color: var(--mu); font-style: italic; }
 table.lista td:first-child { font-weight: 700; }
 table.lista tr { cursor: pointer; }
+/* nomes da CVM são longos: na lista, quebram linha em vez de alargar a tabela */
+table.lista td:nth-child(-n+3) { white-space: normal; }
+table.lista td:first-child { min-width: 6.5em; }
+table.lista td:nth-child(2) { min-width: 14em; }
+table.lista td:nth-child(3) { min-width: 9em; }
+@media (max-width: 700px) { table.lista th:nth-child(n+4), table.lista td:nth-child(n+4) { display: none; } }
+@media (max-width: 480px) { table.lista th:nth-child(3), table.lista td:nth-child(3) { display: none; } }
 
 .aviso { border-radius: 12px; padding: 12px 16px; margin: 0 0 16px; font-size: 14px; border: 1px solid; }
 .aviso.info { background: var(--a3); border-color: var(--a2); }
