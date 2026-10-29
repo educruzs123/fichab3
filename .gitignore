@@ -9,3 +9,4 @@ config.json
 *.log
 cache/
 .DS_Store
+dist/

@@ -1,0 +1,55 @@
+FichaB3Completa 1.3 — fichas de ações da B3 a partir da sua base local da CVM
+=====================================================================
+
+INSTALAR
+1. Arraste o FichaB3Completa para a pasta Aplicativos (o atalho está ao lado).
+2. Abra o FichaB3Completa em Aplicativos.
+
+PRIMEIRA ABERTURA (aviso de segurança do macOS)
+O app não é assinado por um desenvolvedor cadastrado na Apple, então na
+primeira vez o macOS mostra um aviso e não abre. Para liberar:
+  • macOS 15 (Sequoia) ou mais novo: clique em "Concluído", abra
+    Ajustes do Sistema › Privacidade e Segurança, role até a mensagem
+    sobre o FichaB3Completa e clique em "Abrir Mesmo Assim". Confirme com sua senha.
+  • macOS 14 ou anterior: clique com o botão direito no FichaB3Completa em
+    Aplicativos › Abrir › Abrir.
+  • Alternativa pelo Terminal (qualquer versão):
+      xattr -dr com.apple.quarantine /Applications/FichaB3Completa.app
+Isso só é preciso uma vez.
+
+CONFIGURAR (uma vez)
+O FichaB3Completa abre no seu navegador, em http://127.0.0.1:47321
+1. As demonstrações financeiras vêm do banco "fichas-b3" no Supabase, que já
+   tem todas as companhias da CVM (2010 em diante) e se atualiza sozinho todo
+   domingo. Não precisa baixar nada: a conexão já vem configurada.
+   Em Configuração › Fonte dos dados, o botão "Testar" mostra se está tudo ok.
+2. Cole sua chave da Alpha Vantage (gratuita em alphavantage.co) e clique em
+   "Salvar" e "Testar". Ela é usada para cotação, P/L e dividend yield.
+Opcional: em Fonte dos dados, "Arquivos da CVM no Mac" volta a usar os zips
+baixados para uma pasta do Mac, sem depender da internet para os balanços.
+
+USAR
+Digite um ticker na busca (ex.: BBDC4, VALE3, LEVE3) ou escolha na lista.
+Cada ficha tem receita, lucro e margens, ROE, ROA, P/L, EV/EBITDA,
+fluxo de caixa livre, crescimento médio (CAGR), cotação (1 a 10 anos),
+retorno com proventos reinvestidos, proventos e yield, endividamento,
+geração de caixa e as tabelas anual e trimestral. Dá para baixar a tabela
+em CSV ou imprimir/salvar em PDF.
+
+ATUALIZAR OS DADOS
+• Balanços: automático. O banco no Supabase baixa da CVM o ano atual e o
+  anterior todo domingo e recalcula os trimestres.
+• Cotações: se atualizam sozinhas (cada ficha guarda a cotação por 12 horas).
+  O botão "Atualizar cotação", na ficha, busca na hora.
+
+ONDE FICAM OS ARQUIVOS
+~/FichaB3/config.json   configuração (pastas e chave)
+~/FichaB3/banco/        banco importado (um arquivo por empresa)
+~/FichaB3/cache/        cotações baixadas (válidas por 12 horas)
+~/FichaB3/fichab3.log   registro de funcionamento
+
+FECHAR
+O app roda em segundo plano, sem ícone no Dock. Para fechar:
+Configuração › "Encerrar FichaB3Completa". Abrir o app de novo reabre a janela.
+
+Requisitos: macOS 11 ou mais novo (Apple Silicon ou Intel).
