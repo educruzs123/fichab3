@@ -2,11 +2,14 @@
   --bg: #F5F6F8; --card: #FFFFFF; --tx: #15181E; --mu: #5D6575; --ln: #E3E6EC; --ln2: #EEF0F4;
   --a: #1F4FD1; --a2: #8FA8EE; --a3: #DCE5FB; --b: #E0752D; --c: #0E9384; --ok: #17803D; --bad: #C2362F;
   --grade: #ECEEF2; --eixo: #9AA1AE; --sombra: 0 1px 2px rgba(16,24,40,.05), 0 4px 14px rgba(16,24,40,.05);
+  /* séries dos gráficos: no máximo 3 por gráfico (paleta validada para daltonismo nos dois modos) */
+  --s1: #1F4FD1; --s2: #E0752D; --s3: #0E9384;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #111318; --card: #1A1D24; --tx: #E8EBF1; --mu: #9AA2B3; --ln: #2B303A; --ln2: #232731;
     --a: #6F92F2; --a2: #3D528F; --a3: #222C47; --b: #F0965A; --c: #3CC0AF; --ok: #4CC38A; --bad: #EF6B63;
-    --grade: #262A33; --eixo: #6B7280; --sombra: none; }
+    --grade: #262A33; --eixo: #6B7280; --sombra: none;
+    --s1: #4F7FEE; --s2: #D0702F; --s3: #1E9E8E; }
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }

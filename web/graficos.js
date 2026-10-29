@@ -55,7 +55,18 @@
     el.appendChild(lg);
   }
 
-  /* Categorias (anos): barras e/ou linhas, eixo esquerdo e direito. */
+  // barra com a ponta do dado arredondada (4px) e o lado da base reto
+  function barra(g, x, w, yv, y0, attrs) {
+    const h = Math.abs(yv - y0), r = Math.min(4, w / 2, h), t = yv < y0 ? 1 : -1; // t: barra cresce para cima
+    const ponta = yv, d = `M${x},${y0}V${ponta + t * r}Q${x},${ponta} ${x + r},${ponta}H${x + w - r}Q${x + w},${ponta} ${x + w},${ponta + t * r}V${y0}Z`;
+    return s('path', Object.assign({ d: h < .5 ? `M${x},${y0}h${w}v-.5h-${w}Z` : d }, attrs), g);
+  }
+  // marcador com anel na cor do fundo, para ficar legível sobre linhas e barras
+  function ponto(g, x, y, cor, vazado) {
+    return s('circle', { cx: x, cy: y, r: 4, fill: vazado ? 'var(--card)' : cor, stroke: vazado ? cor : 'var(--card)', 'stroke-width': 2 }, g);
+  }
+
+  /* Categorias (anos): barras e/ou linhas numa escala só. */
   function categorias(el, o) {
     const fn = () => {
       el.textContent = '';
@@ -65,59 +76,52 @@
       if (o.legenda !== false && o.series.length > 1) legenda(el, o.series);
       const W = Math.max(300, el.clientWidth), H = o.altura || 280;
       const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img', 'aria-label': o.aria || '' }, el);
-      const esq = o.series.filter(x => x.eixo !== 'dir'), dir = o.series.filter(x => x.eixo === 'dir');
-      const ext = (ss, extra) => { let mn = Infinity, mx = -Infinity; ss.forEach(x => x.vals.forEach(v => { if (v != null && isFinite(v)) { mn = Math.min(mn, v); mx = Math.max(mx, v); } })); (extra || []).forEach(v => { if (v != null) { mn = Math.min(mn, v); mx = Math.max(mx, v); } }); if (!isFinite(mn)) { mn = 0; mx = 1; } if (ss.some(x => x.tipo !== 'linha') || o.zero !== false) { mn = Math.min(0, mn); mx = Math.max(0, mx); } return [mn, mx]; };
-      const refE = (o.refs || []).filter(r => r.eixo !== 'dir').map(r => r.valor), refD = (o.refs || []).filter(r => r.eixo === 'dir').map(r => r.valor);
-      const [e0, e1] = ext(esq, refE), tE = niceTicks(e0, e1, 5);
-      const fE = o.fmtEsq || (v => v), fD = o.fmtDir || (v => v);
-      let tD = null;
-      if (dir.length) { const [d0, d1] = ext(dir, refD); tD = niceTicks(d0, d1, 5); }
-      const mt = o.rotulos ? 34 : 14, mb = 26;
-      const ml = Math.max(...tE.map(v => medir(svg, fE(v)))) + 12;
-      const mr = tD ? Math.max(...tD.map(v => medir(svg, fD(v)))) + 12 : 8;
-      const yE = escala(tE[0], tE[tE.length - 1], H - mb, mt);
-      const yD = tD ? escala(tD[0], tD[tD.length - 1], H - mb, mt) : null;
+      let mn = Infinity, mx = -Infinity;
+      o.series.forEach(x => x.vals.forEach(v => { if (v != null && isFinite(v)) { mn = Math.min(mn, v); mx = Math.max(mx, v); } }));
+      (o.refs || []).forEach(r => { mn = Math.min(mn, r.valor); mx = Math.max(mx, r.valor); });
+      if (o.series.some(x => x.tipo !== 'linha') || o.zero !== false) { mn = Math.min(0, mn); mx = Math.max(0, mx); }
+      const tk = niceTicks(mn, mx, 5), fE = o.fmtEsq || (v => v);
+      const mt = o.rotulos ? 34 : 14, mb = 26, mr = 8;
+      const ml = Math.max(...tk.map(v => medir(svg, fE(v)))) + 12;
+      const Y = escala(tk[0], tk[tk.length - 1], H - mb, mt);
       const n = cats.length, step = (W - ml - mr) / n;
       const cx = i => ml + step * (i + .5);
       const g = s('g', {}, svg);
-      tE.forEach(v => { s('line', { x1: ml, x2: W - mr, y1: yE(v), y2: yE(v), stroke: v === 0 ? 'var(--eixo)' : 'var(--grade)', 'stroke-width': 1 }, g); txt(g, ml - 6, yE(v) + 4, fE(v), { 'text-anchor': 'end' }); });
-      if (tD) tD.forEach(v => txt(g, W - mr + 6, yD(v) + 4, fD(v), { 'text-anchor': 'start' }));
-      (o.refs || []).forEach(r => { const y = (r.eixo === 'dir' ? yD : yE)(r.valor); s('line', { x1: ml, x2: W - mr, y1: y, y2: y, stroke: r.cor || 'var(--eixo)', 'stroke-dasharray': '5,4', 'stroke-width': 1.2 }, g); if (r.rotulo) txt(g, ml + 4, y - 5, r.rotulo, { 'text-anchor': 'start', fill: r.cor || 'var(--mu)' }); });
+      tk.forEach(v => { s('line', { x1: ml, x2: W - mr, y1: Y(v), y2: Y(v), stroke: v === 0 ? 'var(--eixo)' : 'var(--grade)', 'stroke-width': 1 }, g); txt(g, ml - 6, Y(v) + 4, fE(v), { 'text-anchor': 'end' }); });
+      (o.refs || []).forEach(r => { const y = Y(r.valor); s('line', { x1: ml, x2: W - mr, y1: y, y2: y, stroke: 'var(--eixo)', 'stroke-dasharray': '5,4', 'stroke-width': 1 }, g); if (r.rotulo) txt(g, ml + 4, y - 5, r.rotulo, { 'text-anchor': 'start' }); });
       const barras = o.series.filter(x => x.tipo !== 'linha');
-      const nb = barras.length, bwTot = Math.min(step * .72, nb * 46), bw = bwTot / Math.max(1, nb);
+      const nb = barras.length, gap = 2, bw = Math.max(2, Math.min(24, (step * .7 - gap * (nb - 1)) / Math.max(1, nb)));
+      const bwTot = nb * bw + gap * (nb - 1);
       barras.forEach((x, bi) => {
-        const y = x.eixo === 'dir' ? yD : yE;
         x.vals.forEach((v, i) => {
           if (v == null || !isFinite(v)) return;
-          const x0 = cx(i) - bwTot / 2 + bi * bw + 1, y0 = y(Math.max(0, v)), h = Math.abs(y(v) - y(0));
           const parc = o.parcial && o.parcial[i];
-          s('rect', { x: x0, y: y0, width: Math.max(1, bw - 2), height: Math.max(.5, h), rx: 3, fill: (x.corNeg && v < 0) ? x.corNeg : x.cor, 'fill-opacity': parc ? .35 : 1, stroke: parc ? x.cor : null, 'stroke-dasharray': parc ? '4,3' : null }, g);
+          barra(g, cx(i) - bwTot / 2 + bi * (bw + gap), bw, Y(v), Y(0), { fill: (x.corNeg && v < 0) ? x.corNeg : x.cor, 'fill-opacity': parc ? .4 : 1 });
         });
       });
       o.series.filter(x => x.tipo === 'linha').forEach(x => {
-        const y = x.eixo === 'dir' ? yD : yE;
         let d = '', on = false;
-        x.vals.forEach((v, i) => { if (v == null || !isFinite(v)) { on = false; return; } d += (on ? 'L' : 'M') + cx(i).toFixed(1) + ',' + y(v).toFixed(1); on = true; });
-        s('path', { d, fill: 'none', stroke: x.cor, 'stroke-width': 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'stroke-dasharray': x.tracejado ? '5,4' : null }, g);
-        x.vals.forEach((v, i) => { if (v == null || !isFinite(v)) return; const parc = o.parcial && o.parcial[i]; s('circle', { cx: cx(i), cy: y(v), r: 3.2, fill: parc ? 'var(--card)' : x.cor, stroke: x.cor, 'stroke-width': parc ? 2 : 0 }, g); });
+        x.vals.forEach((v, i) => { if (v == null || !isFinite(v)) { on = false; return; } d += (on ? 'L' : 'M') + cx(i).toFixed(1) + ',' + Y(v).toFixed(1); on = true; });
+        s('path', { d, fill: 'none', stroke: x.cor, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, g);
+        x.vals.forEach((v, i) => { if (v == null || !isFinite(v)) return; ponto(g, cx(i), Y(v), x.cor, o.parcial && o.parcial[i]); });
       });
       if (o.rotulos) {
-        const sr = o.series[o.rotulos.serie || 0], y = sr.eixo === 'dir' ? yD : yE;
+        const sr = o.series[o.rotulos.serie || 0];
         const larg = medir(svg, o.rotulos.amostra || '000,0') + 6;
         if (larg <= step) sr.vals.forEach((v, i) => {
           if (v == null || !isFinite(v)) return;
-          const top = sr.tipo === 'linha' ? y(v) - 9 : Math.min(y(v), y(0)) - (o.rotulos.sub ? 17 : 5);
+          const top = sr.tipo === 'linha' ? Y(v) - 10 : Math.min(Y(v), Y(0)) - (o.rotulos.sub ? 17 : 5);
           txt(g, cx(i), top, (o.rotulos.fmt || fE)(v), { 'text-anchor': 'middle', class: 'val' });
           if (o.rotulos.sub) { const t2 = o.rotulos.sub(i); if (t2) txt(g, cx(i), top + 13, t2.t, { 'text-anchor': 'middle', fill: t2.cor || 'var(--mu)' }); }
         });
       }
       const lw = medir(svg, cats[n - 1] || '2026*') + 8, every = Math.max(1, Math.ceil(lw / step));
       cats.forEach((c, i) => { if ((n - 1 - i) % every === 0) txt(g, cx(i), H - mb + 17, c, { 'text-anchor': 'middle' }); });
-      const hl = s('rect', { y: mt, height: H - mt - mb, fill: 'var(--a3)', opacity: .45, display: 'none' }, svg);
+      const hl = s('rect', { y: mt, height: H - mt - mb, rx: 4, fill: 'var(--a3)', opacity: .45, display: 'none' }, svg);
       svg.insertBefore(hl, g);
       cats.forEach((c, i) => {
         const r = s('rect', { x: ml + step * i, y: mt, width: step, height: H - mt - mb, fill: 'transparent' }, svg);
-        r.addEventListener('mousemove', ev => { hl.setAttribute('x', ml + step * i); hl.setAttribute('width', step); hl.removeAttribute('display'); mostrarTip(ev, o.titulo ? o.titulo(i) : c, o.tooltip ? o.tooltip(i) : o.series.map(x => [x.nome, x.vals[i] == null ? null : (x.eixo === 'dir' ? fD : fE)(x.vals[i]), x.cor])); });
+        r.addEventListener('mousemove', ev => { hl.setAttribute('x', ml + step * i); hl.setAttribute('width', step); hl.removeAttribute('display'); mostrarTip(ev, o.titulo ? o.titulo(i) : c, o.tooltip ? o.tooltip(i) : o.series.map(x => [x.nome, x.vals[i] == null ? null : fE(x.vals[i]), x.cor])); });
         r.addEventListener('mouseleave', () => { hl.setAttribute('display', 'none'); esconderTip(); });
       });
     };
@@ -140,12 +144,12 @@
       if (o.zero !== false) mn = Math.min(0, mn);
       const tk = niceTicks(mn, mx, 5), fmt = o.fmt || (v => v);
       const ml = Math.max(...tk.map(v => medir(svg, fmt(v)))) + 12;
-      const mr = o.rotFinal ? Math.max(...o.series.map(x => medir(svg, fmt(pts[pts.length - 1][x.key] || 0)))) + 14 : 10;
+      const mr = o.rotFinal ? Math.max(...o.series.map(x => medir(svg, fmt(pts[pts.length - 1][x.key] || 0)))) + 16 : 10;
       const t0 = pts[0].d.getTime(), t1 = pts[pts.length - 1].d.getTime();
       const X = escala(t0, t1, ml, W - mr), Y = escala(tk[0], tk[tk.length - 1], H - mb, mt);
       const g = s('g', {}, svg);
       tk.forEach(v => { s('line', { x1: ml, x2: W - mr, y1: Y(v), y2: Y(v), stroke: v === 0 ? 'var(--eixo)' : 'var(--grade)' }, g); txt(g, ml - 6, Y(v) + 4, fmt(v), { 'text-anchor': 'end' }); });
-      if (o.ref != null) s('line', { x1: ml, x2: W - mr, y1: Y(o.ref), y2: Y(o.ref), stroke: 'var(--eixo)', 'stroke-dasharray': '4,4' }, g);
+      if (o.ref != null) s('line', { x1: ml, x2: W - mr, y1: Y(o.ref), y2: Y(o.ref), stroke: 'var(--eixo)', 'stroke-dasharray': '5,4' }, g);
       // eixo x
       const curto = (t1 - t0) < 1000 * 86400 * 800;
       const ticks = [];
@@ -159,13 +163,13 @@
         let d = '', on = false;
         pts.forEach(p => { const v = p[x.key]; if (v == null || !isFinite(v)) { on = false; return; } d += (on ? 'L' : 'M') + X(p.d.getTime()).toFixed(1) + ',' + Y(v).toFixed(1); on = true; });
         if (si === 0 && o.area) s('path', { d: d + `L${X(t1)},${Y(Math.max(0, tk[0]))}L${X(t0)},${Y(Math.max(0, tk[0]))}Z`, fill: x.cor, 'fill-opacity': .1 }, g);
-        s('path', { d, fill: 'none', stroke: x.cor, 'stroke-width': x.largura || 2, 'stroke-linejoin': 'round' }, g);
+        s('path', { d, fill: 'none', stroke: x.cor, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, g);
       });
       if (o.rotFinal) {
         const lp = pts[pts.length - 1];
         const ls = o.series.map(x => ({ v: lp[x.key], c: x.cor })).filter(z => z.v != null).sort((a, b) => b.v - a.v);
         let prev = -Infinity;
-        ls.forEach(z => { let y = Y(z.v) + 4; if (y - prev < 14) y = prev + 14; prev = y; txt(g, W - mr + 6, y, fmt(z.v), { fill: z.c, 'font-weight': 600 }); });
+        ls.forEach(z => { ponto(g, X(t1), Y(z.v), z.c); let y = Y(z.v) + 4; if (y - prev < 14) y = prev + 14; prev = y; txt(g, W - mr + 8, y, fmt(z.v), { class: 'val' }); });
       }
       const rule = s('line', { y1: mt, y2: H - mb, stroke: 'var(--eixo)', display: 'none' }, svg);
       const dots = o.series.map(x => s('circle', { r: 4, fill: x.cor, stroke: 'var(--card)', 'stroke-width': 2, display: 'none' }, svg));

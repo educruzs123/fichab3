@@ -168,7 +168,7 @@
     const at = f.atual || {}, m12 = at.doze_meses || {};
     const cats = A.map(r => r.rotulo), parc = A.map(r => r.parcial);
     const fin = f.financeira;
-    const C1 = 'var(--a)', C2 = 'var(--b)', C3 = 'var(--c)', C4 = 'var(--a2)';
+    const C1 = 'var(--s1)', C2 = 'var(--s2)', C3 = 'var(--s3)';
 
     // cabeçalho
     app.appendChild(h('p', { class: 'kicker' }, [f.setor, f.tipo, f.ativa ? null : 'cancelada na CVM'].filter(Boolean).join(' · ')));
@@ -237,11 +237,11 @@
       rotulos: { fmt: fv, amostra: emBi ? '000,0' : '00.000', sub: i => A[i].cresc_receita != null ? { t: pctS(A[i].cresc_receita), cor: A[i].cresc_receita >= 0 ? 'var(--ok)' : 'var(--bad)' } : null },
       titulo: i => A[i].parcial ? cats[i] + ' · ' + f.periodo_12m : cats[i], tooltip: i => [[f.rotulo_receita, mi(A[i].receita), C1], ['Crescimento', pctS(A[i].cresc_receita)]] });
 
-    // lucro e margem líquida
+    // lucro (a margem líquida está no gráfico de margens)
     const gL = h('div', { class: 'graf' });
-    app.appendChild(card(h('h2', null, 'Lucro líquido e margem líquida'), h('p', { class: 'desc' }, `Barras: lucro atribuído aos controladores (${un}); linha: lucro líquido ÷ receita (eixo à direita).`), gL));
-    G.categorias(gL, { cats, parcial: parc, series: [{ nome: 'Lucro dos controladores', cor: C1, corNeg: 'var(--bad)', vals: A.map(r => ok(r.lucro_ctrl) ? r.lucro_ctrl / div : null) }, { nome: 'Margem líquida', tipo: 'linha', eixo: 'dir', cor: C2, vals: A.map(r => r.margem_liq) }],
-      fmtEsq: fa, fmtDir: v => N0.format(v * 100) + '%', zero: true,
+    app.appendChild(card(h('h2', null, 'Lucro líquido'), h('p', { class: 'desc' }, `Lucro atribuído aos controladores, ${un}. Prejuízo em vermelho; a margem líquida está no gráfico de margens.`), gL));
+    G.categorias(gL, { cats, parcial: parc, series: [{ nome: 'Lucro dos controladores', cor: C1, corNeg: 'var(--bad)', vals: A.map(r => ok(r.lucro_ctrl) ? r.lucro_ctrl / div : null) }],
+      fmtEsq: fa, zero: true, legenda: false,
       tooltip: i => [['Lucro dos controladores', mi(A[i].lucro_ctrl), C1], ['Lucro líquido total', mi(A[i].lucro)], ['Margem líquida', pct(A[i].margem_liq), C2], ['Variação do lucro', pctS(A[i].cresc_lucro)]] });
 
     // margens e ROE
@@ -270,25 +270,32 @@
     if (temPreco) secaoCotacao(f);
 
     // proventos
-    const gV = h('div', { class: 'graf' });
+    const gV = h('div', { class: 'graf' }), gY = h('div', { class: 'graf' });
     const Ap = A.filter(r => !r.parcial || r.dy_data_com != null);
-    app.appendChild(card(h('h2', null, 'Proventos e dividend yield'), h('p', { class: 'desc' }, 'Barras: dividendos e JCP pagos em caixa no ano (fluxo de caixa da DFP) por ação, na base atual de ações; linha: dividend yield sobre o valor de mercado no fim do ano. ',
-      A.some(r => r.parcial) ? `${cats[cats.length - 1]}: proventos com data-ex nos últimos 12 meses (Alpha Vantage) sobre a cotação atual. ` : '', 'No detalhe, o payout (proventos ÷ lucro).'), gV));
-    G.categorias(gV, { cats: Ap.map(r => r.rotulo), parcial: Ap.map(r => r.parcial), series: [{ nome: 'Proventos por ação (R$)', cor: C4, vals: Ap.map(r => r.parcial ? r.prov_data_com : r.prov_acao) }, { nome: 'Dividend yield', tipo: 'linha', eixo: 'dir', cor: C2, vals: Ap.map(r => r.parcial ? r.dy_data_com : r.dy) }],
-      fmtEsq: v => 'R$ ' + N2.format(v), fmtDir: v => N0.format(v * 100) + '%',
-      tooltip: i => { const r = Ap[i]; return [['Pagos no ano', r.parcial ? null : mi(r.proventos)], ['Por ação', rs(r.parcial ? r.prov_data_com : r.prov_acao), C4], ['Dividend yield', pct(r.parcial ? r.dy_data_com : r.dy), C2], ['Payout', pct(r.payout)], ['Recompras', r.recompras ? mi(r.recompras) : null], ['Por ação pela data-ex (AV)', r.parcial ? null : rs(r.prov_data_com)]]; } });
+    const ultParc = A.some(r => r.parcial) ? `${cats[cats.length - 1]}: proventos com data-ex nos últimos 12 meses ` : '';
+    app.appendChild(h('div', { class: 'grade2 secao' },
+      h('section', { class: 'card' }, h('h2', null, 'Proventos por ação'), h('p', { class: 'desc' }, 'Dividendos e JCP pagos em caixa no ano (fluxo de caixa da DFP), em R$ por ação na base atual. ', ultParc ? ultParc.trim() + '. ' : '', 'No detalhe, o payout.'), gV),
+      h('section', { class: 'card' }, h('h2', null, 'Dividend yield'), h('p', { class: 'desc' }, 'Proventos do ano ÷ valor de mercado no fim do ano. ', ultParc ? ultParc + 'sobre a cotação atual.' : ''), gY)));
+    const tipProv = i => { const r = Ap[i]; return [['Pagos no ano', r.parcial ? null : mi(r.proventos)], ['Por ação', rs(r.parcial ? r.prov_data_com : r.prov_acao), C1], ['Dividend yield', pct(r.parcial ? r.dy_data_com : r.dy), C2], ['Payout', pct(r.payout)], ['Recompras', r.recompras ? mi(r.recompras) : null], ['Por ação pela data-ex', r.parcial ? null : rs(r.prov_data_com)]]; };
+    G.categorias(gV, { cats: Ap.map(r => r.rotulo), parcial: Ap.map(r => r.parcial), series: [{ nome: 'Proventos por ação', cor: C1, vals: Ap.map(r => r.parcial ? r.prov_data_com : r.prov_acao) }],
+      fmtEsq: v => 'R$ ' + N2.format(v), legenda: false, tooltip: tipProv });
+    G.categorias(gY, { cats: Ap.map(r => r.rotulo), parcial: Ap.map(r => r.parcial), series: [{ nome: 'Dividend yield', tipo: 'linha', cor: C2, vals: Ap.map(r => r.parcial ? r.dy_data_com : r.dy) }],
+      fmtEsq: v => N0.format(v * 100) + '%', legenda: false, tooltip: tipProv });
 
     // endividamento
     if (!fin) {
-      const gD = h('div', { class: 'graf' });
-      app.appendChild(card(h('h2', null, 'Endividamento'), h('p', { class: 'desc' }, `Barras: dívida líquida = empréstimos e financiamentos − caixa e aplicações (${un}); linha: dívida líquida ÷ EBITDA dos 12 meses (eixo à direita). Valor negativo = caixa líquido.`), gD));
-      G.categorias(gD, { cats, parcial: parc, series: [{ nome: 'Dívida líquida', cor: C1, corNeg: C3, vals: A.map(r => ok(r.div_liq) ? r.div_liq / div : null) }, { nome: 'Dív. líq. / EBITDA', tipo: 'linha', eixo: 'dir', cor: C2, vals: A.map(r => r.div_ebitda) }],
-        fmtEsq: fa, fmtDir: v => N1.format(v) + 'x', tooltip: i => [['Dívida bruta', mi(A[i].div_bruta)], ['Caixa e aplicações', mi(A[i].caixa)], ['Dívida líquida', mi(A[i].div_liq), C1], ['Dív. líq. / EBITDA', xv(A[i].div_ebitda), C2]] });
+      const gD = h('div', { class: 'graf' }), gDE = h('div', { class: 'graf' });
+      app.appendChild(h('div', { class: 'grade2 secao' },
+        h('section', { class: 'card' }, h('h2', null, 'Dívida líquida'), h('p', { class: 'desc' }, `Empréstimos e financiamentos − caixa e aplicações, ${un}. Abaixo de zero (verde-água) = caixa líquido.`), gD),
+        h('section', { class: 'card' }, h('h2', null, 'Dívida líquida / EBITDA'), h('p', { class: 'desc' }, 'Dívida líquida ÷ EBITDA dos 12 meses: quantos anos de geração operacional pagariam a dívida.'), gDE)));
+      const tipDiv = i => [['Dívida bruta', mi(A[i].div_bruta)], ['Caixa e aplicações', mi(A[i].caixa)], ['Dívida líquida', mi(A[i].div_liq), C1], ['Dív. líq. / EBITDA', xv(A[i].div_ebitda), C2]];
+      G.categorias(gD, { cats, parcial: parc, series: [{ nome: 'Dívida líquida', cor: C1, corNeg: C3, vals: A.map(r => ok(r.div_liq) ? r.div_liq / div : null) }], fmtEsq: fa, legenda: false, tooltip: tipDiv });
+      G.categorias(gDE, { cats, parcial: parc, series: [{ nome: 'Dív. líq. / EBITDA', tipo: 'linha', cor: C2, vals: A.map(r => r.div_ebitda) }], fmtEsq: v => N1.format(v) + 'x', legenda: false, tooltip: tipDiv });
       // fluxo de caixa
       const gF = h('div', { class: 'graf' });
-      app.appendChild(card(h('h2', null, 'Geração de caixa'), h('p', { class: 'desc' }, `Barras: caixa das operações (FCO), investimentos em imobilizado e intangível (capex) e proventos pagos; linha: fluxo de caixa livre (FCO − capex), ${un}.`), gF));
-      G.categorias(gF, { cats: fech.map(r => r.rotulo), series: [{ nome: 'FCO', cor: C1, vals: fech.map(r => ok(r.fco) ? r.fco / div : null) }, { nome: 'Capex', cor: C2, vals: fech.map(r => ok(r.capex) ? r.capex / div : null) }, { nome: 'Proventos pagos', cor: C4, vals: fech.map(r => ok(r.proventos) ? r.proventos / div : null) }, { nome: 'Fluxo de caixa livre', tipo: 'linha', cor: C3, vals: fech.map(r => ok(r.fcl) ? r.fcl / div : null) }],
-        fmtEsq: fa, tooltip: i => { const r = fech[i]; return [['FCO', mi(r.fco), C1], ['Capex', mi(r.capex), C2], ['Fluxo de caixa livre', mi(r.fcl), C3], ['FCL yield', pct(r.fcl_yield)], ['Proventos pagos', mi(r.proventos), C4], ['Recompras', r.recompras ? mi(r.recompras) : null]]; } });
+      app.appendChild(card(h('h2', null, 'Geração de caixa'), h('p', { class: 'desc' }, `Barras: caixa das operações (FCO) e investimentos em imobilizado e intangível (capex); linha: fluxo de caixa livre (FCO − capex), ${un}. Proventos pagos e recompras no detalhe.`), gF));
+      G.categorias(gF, { cats: fech.map(r => r.rotulo), series: [{ nome: 'FCO', cor: C1, vals: fech.map(r => ok(r.fco) ? r.fco / div : null) }, { nome: 'Capex', cor: C2, vals: fech.map(r => ok(r.capex) ? r.capex / div : null) }, { nome: 'Fluxo de caixa livre', tipo: 'linha', cor: C3, vals: fech.map(r => ok(r.fcl) ? r.fcl / div : null) }],
+        fmtEsq: fa, tooltip: i => { const r = fech[i]; return [['FCO', mi(r.fco), C1], ['Capex', mi(r.capex), C2], ['Fluxo de caixa livre', mi(r.fcl), C3], ['FCL yield', pct(r.fcl_yield)], ['Proventos pagos', mi(r.proventos)], ['Recompras', r.recompras ? mi(r.recompras) : null]]; } });
     }
 
     // tabela anual
@@ -312,12 +319,14 @@
       if (!fin) colsT.push(['EBITDA', t => miN(t.ebitda)]);
       colsT.push(['Lucro ctrl.', t => miN(t.lucro_ctrl)], ['Var. a/a', t => pctS(t.var_lucro)], ['Mg. líq.', t => pct(t.margem_liq)], ['ROE 12m', t => pct(t.roe_12m)], ['PL', t => miN(t.pl)]);
       if (!fin) colsT.push(['Dív. líq.', t => miN(t.div_liq)], ['DL/EBITDA 12m', t => xv(t.div_ebitda_12m)], ['FCO', t => miN(t.fco)]);
-      const gT = h('div', { class: 'graf' });
-      app.appendChild(card(h('h2', null, 'Últimos trimestres'), h('p', { class: 'desc' }, 'Resultados de cada trimestre (ITR/DFP da CVM), R$ milhões. Barras: ' + f.rotulo_receita.toLowerCase() + '; linha: margem líquida.'), gT,
+      const gT = h('div', { class: 'graf' }), gTM = h('div', { class: 'graf' });
+      app.appendChild(card(h('h2', null, 'Últimos trimestres'), h('p', { class: 'desc' }, 'Resultados de cada trimestre (ITR/DFP da CVM). À esquerda, ' + f.rotulo_receita.toLowerCase() + ' (' + un + '); à direita, margem líquida.'),
+        h('div', { class: 'grade2' }, gT, gTM),
         h('div', { class: 'tabela-wrap', style: 'margin-top:12px' }, h('table', { class: 't' }, h('thead', null, h('tr', null, colsT.map((c, i) => h('th', { class: i ? 'n' : '' }, c[0])))),
           h('tbody', null, T.slice().reverse().map(t => h('tr', null, colsT.map((c, i) => h('td', { class: i ? 'n' : '' }, c[1](t))))))))));
-      G.categorias(gT, { cats: T.map(t => t.tri), series: [{ nome: f.rotulo_receita, cor: C1, vals: T.map(t => ok(t.receita) ? t.receita / div : null) }, { nome: 'Margem líquida', tipo: 'linha', eixo: 'dir', cor: C2, vals: T.map(t => t.margem_liq) }], fmtEsq: fa, fmtDir: v => N0.format(v * 100) + '%', altura: 240,
-        tooltip: i => [[f.rotulo_receita, mi(T[i].receita), C1], ['Var. a/a', pctS(T[i].var_receita)], ['Lucro dos controladores', mi(T[i].lucro_ctrl)], ['Margem líquida', pct(T[i].margem_liq), C2]] });
+      const tipT = i => [[f.rotulo_receita, mi(T[i].receita), C1], ['Var. a/a', pctS(T[i].var_receita)], ['Lucro dos controladores', mi(T[i].lucro_ctrl)], ['Margem líquida', pct(T[i].margem_liq), C2]];
+      G.categorias(gT, { cats: T.map(t => t.tri), series: [{ nome: f.rotulo_receita, cor: C1, vals: T.map(t => ok(t.receita) ? t.receita / div : null) }], fmtEsq: fa, altura: 240, legenda: false, tooltip: tipT });
+      G.categorias(gTM, { cats: T.map(t => t.tri), series: [{ nome: 'Margem líquida', tipo: 'linha', cor: C2, vals: T.map(t => t.margem_liq) }], fmtEsq: v => N0.format(v * 100) + '%', zero: false, altura: 240, legenda: false, tooltip: tipT });
     }
 
     // notas
@@ -351,11 +360,11 @@
       info.append('Fechamento do último pregão de cada mês, em R$, ajustado por desdobramentos. Último: ', h('b', null, rs(ultimo.v)), ' em ' + dataBR(f.atual.cotacao_data) + '. No intervalo: ', h('b', { class: cls(vp) }, pctS(vp)), '.');
       info2.textContent = '';
       info2.append('Quanto viraria R$ 1.000 aplicados em ' + v0.mes.slice(5) + '/' + v0.mes.slice(0, 4) + ': só pelo preço ', h('b', { class: cls(vp) }, pctS(vp)), '; reinvestindo dividendos e JCP ', h('b', { class: cls(vt) }, pctS(vt)), '.');
-      G.tempo(g1, { pts: s, series: [{ nome: 'Fechamento', key: 'v', cor: 'var(--a)' }], area: true, fmt: v => 'R$ ' + (v < 10 ? N2 : N0).format(v),
+      G.tempo(g1, { pts: s, series: [{ nome: 'Fechamento', key: 'v', cor: 'var(--s1)' }], area: true, fmt: v => 'R$ ' + (v < 10 ? N2 : N0).format(v),
         tooltip: (p) => { const i = pts.indexOf(p); const r = [['Fechamento', rs(p.v)]]; if (i >= 12) r.push(['Variação em 12 meses', pctS(p.v / pts[i - 12].v - 1)]); if (p.p) r.push(['Provento no mês', rs(p.p, 4)]); return r; } });
       const idx = s.map(p => ({ d: p.d, so: 1000 * p.v / v0.v, com: 1000 * p.a / v0.a }));
-      G.tempo(g2, { pts: idx, series: [{ nome: 'Só preço', key: 'so', cor: 'var(--eixo)' }, { nome: 'Com proventos reinvestidos', key: 'com', cor: 'var(--c)', largura: 2.5 }], fmt: v => 'R$ ' + N0.format(v), ref: 1000, zero: false, rotFinal: true, altura: 240,
-        tooltip: p => [['Com proventos', 'R$ ' + N0.format(p.com) + ' (' + pctS(p.com / 1000 - 1) + ')', 'var(--c)'], ['Só preço', 'R$ ' + N0.format(p.so) + ' (' + pctS(p.so / 1000 - 1) + ')', 'var(--eixo)']] });
+      G.tempo(g2, { pts: idx, series: [{ nome: 'Só preço', key: 'so', cor: 'var(--eixo)' }, { nome: 'Com proventos reinvestidos', key: 'com', cor: 'var(--s3)' }], fmt: v => 'R$ ' + N0.format(v), ref: 1000, zero: false, rotFinal: true, altura: 240,
+        tooltip: p => [['Com proventos', 'R$ ' + N0.format(p.com) + ' (' + pctS(p.com / 1000 - 1) + ')', 'var(--s3)'], ['Só preço', 'R$ ' + N0.format(p.so) + ' (' + pctS(p.so / 1000 - 1) + ')', 'var(--eixo)']] });
     }
     desenhar();
   }
