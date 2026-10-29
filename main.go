@@ -27,7 +27,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.5.0"
+const versao = "1.5.1"
 
 var (
 	appDir  string
@@ -539,7 +539,7 @@ func apiEmpresas(w http.ResponseWriter, r *http.Request) {
 			it.Cotacao, it.Var12, it.DY12 = fp(m.Preco), m.Var12, fp(m.DY12)
 			// lucro mínimo de R$ 100 mil: perto de zero, o P/L explode sem significado
 			if a := acoes[e.ID]; a.Qt > 0 && temU && u.LucroCtrl != nil && *u.LucroCtrl >= 0.1 && u.PL != nil && *u.PL > 0 {
-				vm := m.Preco * a.Qt * fatorEntre(m.Splits, a.Data, "9999") / 1e6 // R$ milhões, na base de ações de hoje
+				vm := m.Preco * a.Qt * fatorEntre(m.Splits, a.Data, "9999") / acoesPorUnit(t) / 1e6 // R$ milhões, na base de ações de hoje
 				// a CVM às vezes informa as ações em milhares: valor de mercado 1000× menor que o normal
 				if vm / *u.PL < 0.02 {
 					vm *= 1000

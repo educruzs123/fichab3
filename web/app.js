@@ -201,7 +201,7 @@
       tile('P/L (12 meses)', xv(at.p_l), f.pl_media != null ? h('span', null, 'média ', h('b', null, xv(f.pl_media))) : ''),
       tile('P/VP', xv(at.p_vp), 'sobre o PL do ' + (f.ult_tri || 'último balanço')),
       tile('Dividend yield 12m', pct(at.dy_12m), at.proventos_12m_acao != null ? h('span', null, h('b', null, rs(at.proventos_12m_acao)), ' por ação') : ''),
-      tile('Valor de mercado', at.valor_mercado_bi != null ? 'R$ ' + N1.format(at.valor_mercado_bi) + ' bi' : '—', at.acoes_mi != null ? N0.format(at.acoes_mi) + ' mi de ações' + (f.contas.acoes === 'capital' ? '' : ' (estimado)') : ''),
+      tile('Valor de mercado', at.valor_mercado_bi != null ? 'R$ ' + N1.format(at.valor_mercado_bi) + ' bi' : '—', at.acoes_mi != null ? N0.format(at.acoes_mi) + (at.acoes_por_unit ? ' mi de units' : ' mi de ações') + (f.contas.acoes === 'capital' ? '' : ' (estimado)') : ''),
       tile('ROE 12m', pct(m12.roe), h('span', null, ult.ano + ': ', h('b', null, pct(ult.roe)), ' · ' + ant.ano + ': ', h('b', null, pct(ant.roe)))));
     app.appendChild(t1);
     const t2 = h('div', { class: 'tiles' });

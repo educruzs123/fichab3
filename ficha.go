@@ -160,6 +160,25 @@ func classeTicker(t string) string {
 	return "ON"
 }
 
+// Ações por unit nas units da B3 (1 ON + k PN). O preço é da unit, então quantidade
+// de ações, LPA e proventos por ação passam para "units equivalentes".
+// shortcut: tabela fixa das units conhecidas; unit nova fica sem correção até entrar aqui.
+var unitsB3 = map[string]struct {
+	n    float64
+	desc string
+}{
+	"ALUP11": {3, "1 ON + 2 PN"}, "BMGB11": {3, "1 ON + 2 PN"}, "BPAC11": {3, "1 ON + 2 PNA"}, "BRBI11": {3, "1 ON + 2 PN"},
+	"ENGI11": {5, "1 ON + 4 PN"}, "IGTI11": {3, "1 ON + 2 PN"}, "KLBN11": {5, "1 ON + 4 PN"}, "RNEW11": {3, "1 ON + 2 PN"},
+	"SANB11": {2, "1 ON + 1 PN"}, "SAPR11": {5, "1 ON + 4 PN"}, "TAEE11": {3, "1 ON + 2 PN"},
+}
+
+func acoesPorUnit(ticker string) float64 {
+	if u, ok := unitsB3[ticker]; ok {
+		return u.n
+	}
+	return 1
+}
+
 func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
 	f := &Ficha{Ticker: ticker, Tickers: e.Tickers, Empresa: e.Nome, NomeCurto: e.NomeCurto, CNPJ: e.CNPJ, CodCVM: e.CodCVM,
 		Setor: e.Setor, Tipo: e.Tipo, Financeira: strings.HasPrefix(strings.ToLower(e.Tipo), "financ"), Ativa: e.Ativa,
@@ -527,6 +546,18 @@ func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
 			}
 		}
 	}
+	if n := acoesPorUnit(ticker); n > 1 {
+		for i := range rows {
+			if rows[i].Acoes != nil {
+				rows[i].Acoes = fp(*rows[i].Acoes / n) // ponteiros podem ser compartilhados entre anos
+			}
+			if rows[i].LPA != nil {
+				rows[i].LPA = fp(*rows[i].LPA * n)
+			}
+		}
+		f.Atual["acoes_por_unit"] = n
+		f.Notas = append(f.Notas, fmt.Sprintf("%s é uma unit (%s): quantidade de ações, lucro e proventos por ação e valor de mercado estão em units equivalentes (total de ações ÷ %g).", ticker, unitsB3[ticker].desc, n))
+	}
 	acRef := 0.0
 	for i := len(rows) - 1; i >= 0; i-- {
 		if rows[i].Acoes != nil {
@@ -702,7 +733,7 @@ func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
 					break
 				}
 			}
-			acoesHoje = fp(v * e / 1e6 * fatorApos(ultCap))
+			acoesHoje = fp(v * e / 1e6 * fatorApos(ultCap) / acoesPorUnit(ticker))
 			f.Atual["acoes_data"] = ultCap
 		}
 		for i := len(rows) - 1; i >= 0; i-- {
