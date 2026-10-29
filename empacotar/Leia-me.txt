@@ -1,4 +1,4 @@
-FichaB3Completa 1.3 — fichas de ações da B3 a partir da sua base local da CVM
+FichaB3Completa 1.4 — fichas de ações da B3 a partir da sua base local da CVM
 =====================================================================
 
 INSTALAR
@@ -30,6 +30,8 @@ baixados para uma pasta do Mac, sem depender da internet para os balanços.
 
 USAR
 Digite um ticker na busca (ex.: BBDC4, VALE3, LEVE3) ou escolha na lista.
+A lista mostra receita, lucro, margem, ROE e dívida dos últimos 12 meses;
+clique no título de uma coluna para ordenar.
 Cada ficha tem receita, lucro e margens, ROE, ROA, P/L, EV/EBITDA,
 fluxo de caixa livre, crescimento médio (CAGR), cotação (1 a 10 anos),
 retorno com proventos reinvestidos, proventos e yield, endividamento,

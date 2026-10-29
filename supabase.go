@@ -34,6 +34,8 @@ type Supa struct {
 	meta    map[string]any
 	cache   map[int]*EmpData
 	cacheEm map[int]time.Time
+	res12   map[int]Ult12
+	res12Em time.Time
 }
 
 func NovoSupa(u, k string) *Supa {
@@ -178,6 +180,38 @@ func (s *Supa) Lista(forcar bool) ([]*Empresa, error) {
 	s.lista, s.porTk, s.listaEm = lista, porTk, time.Now()
 	s.mu.Unlock()
 	return lista, nil
+}
+
+// último trimestre de cada empresa (por id), numa consulta só; guardado por 15 minutos
+func (s *Supa) Ultimos12(forcar bool) (map[int]Ult12, error) {
+	s.mu.Lock()
+	if !forcar && s.res12 != nil && time.Since(s.res12Em) < 15*time.Minute {
+		r := s.res12
+		s.mu.Unlock()
+		return r, nil
+	}
+	s.mu.Unlock()
+	type linha struct {
+		EmpresaID int `json:"empresa_id"`
+		Tri
+	}
+	q := url.Values{}
+	q.Set("select", "empresa_id,ano,tri,receita_12m,lucro_12m,roe_12m,div_ebitda_12m,pl")
+	// shortcut: só os 2 últimos anos; empresa sem trimestre recente fica sem os números
+	q.Set("ano", "gte."+strconv.Itoa(time.Now().Year()-2))
+	q.Set("order", "empresa_id,dt_refer")
+	rows, err := supaTodos[linha](s, "trimestres", q)
+	if err != nil {
+		return nil, err
+	}
+	r := map[int]Ult12{}
+	for _, l := range rows {
+		r[l.EmpresaID] = ult12De(l.Tri) // ordenado por data: fica o último
+	}
+	s.mu.Lock()
+	s.res12, s.res12Em = r, time.Now()
+	s.mu.Unlock()
+	return r, nil
 }
 
 func (s *Supa) PorTicker(t string) (*Empresa, error) {

@@ -159,6 +159,46 @@ type Banco struct {
 	cacheMu  sync.Mutex
 	cache    map[string]*EmpData
 	ordem    []string
+	res12    map[string]Ult12
+}
+
+// Ult12: números dos 12 meses até o último trimestre, para a lista de empresas
+type Ult12 struct {
+	Tri       string   `json:"tri"`
+	Receita   *float64 `json:"receita_12m"`
+	Lucro     *float64 `json:"lucro_12m"`
+	MLiq      *float64 `json:"margem_liq_12m"`
+	ROE       *float64 `json:"roe_12m"`
+	DivEBITDA *float64 `json:"div_ebitda_12m"`
+}
+
+func ult12De(t Tri) Ult12 {
+	u := Ult12{Tri: t.Tri, Receita: t.Receita12, Lucro: t.Lucro12, MLiq: div(t.Lucro12, t.Receita12), ROE: t.ROE12, DivEBITDA: t.DivEBITDA12}
+	// com patrimônio negativo (no fim ou na média), prejuízo vira ROE positivo
+	if (t.PL != nil && *t.PL <= 0) || (u.ROE != nil && *u.ROE > 0 && t.Lucro12 != nil && *t.Lucro12 < 0) {
+		u.ROE = nil
+	}
+	return u
+}
+
+// Ultimos12 lê o último trimestre de cada empresa uma vez por banco importado.
+func (b *Banco) Ultimos12() map[string]Ult12 {
+	b.cacheMu.Lock()
+	r := b.res12
+	b.cacheMu.Unlock()
+	if r != nil {
+		return r
+	}
+	r = map[string]Ult12{}
+	for _, e := range b.Empresas {
+		if d, err := b.Dados(e.CNPJ); err == nil && len(d.Tri) > 0 {
+			r[e.CNPJ] = ult12De(d.Tri[len(d.Tri)-1])
+		}
+	}
+	b.cacheMu.Lock()
+	b.res12 = r
+	b.cacheMu.Unlock()
+	return r
 }
 
 func CarregarBanco(pasta string) (*Banco, error) {

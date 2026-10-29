@@ -27,7 +27,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.3.0"
+const versao = "1.4.0"
 
 var (
 	appDir  string
@@ -475,13 +475,20 @@ func apiTestarSupabase(w http.ResponseWriter, r *http.Request) {
 
 func apiEmpresas(w http.ResponseWriter, r *http.Request) {
 	var b interface{ lista() []*Empresa }
+	ult12 := func(e *Empresa) (Ult12, bool) { return Ult12{}, false }
 	if usaSupa() {
-		l, err := fonteSupa().Lista(r.URL.Query().Get("atualizar") == "1")
+		forcar := r.URL.Query().Get("atualizar") == "1"
+		l, err := fonteSupa().Lista(forcar)
 		if err != nil {
 			jsonErr(w, 502, err.Error())
 			return
 		}
 		b = listaFixa(l)
+		if res, err := fonteSupa().Ultimos12(forcar); err == nil {
+			ult12 = func(e *Empresa) (Ult12, bool) { u, ok := res[e.ID]; return u, ok }
+		} else {
+			log.Printf("lista: sem os números de 12 meses do Supabase: %v", err)
+		}
 	} else {
 		bancoMu.RLock()
 		bb := banco
@@ -491,6 +498,8 @@ func apiEmpresas(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		b = listaFixa(bb.Empresas)
+		res := bb.Ultimos12()
+		ult12 = func(e *Empresa) (Ult12, bool) { u, ok := res[e.CNPJ]; return u, ok }
 	}
 	type item struct {
 		Ticker  string   `json:"ticker"`
@@ -502,6 +511,7 @@ func apiEmpresas(w http.ResponseWriter, r *http.Request) {
 		UltDFP  int      `json:"ult_dfp"`
 		UltTri  string   `json:"ult_tri"`
 		Ativa   bool     `json:"ativa"`
+		*Ult12
 	}
 	out := []item{}
 	for _, e := range b.lista() {
@@ -509,7 +519,11 @@ func apiEmpresas(w http.ResponseWriter, r *http.Request) {
 		if len(e.Tickers) > 0 {
 			t = e.Tickers[0]
 		}
-		out = append(out, item{t, e.Tickers, e.Nome, e.Setor, e.Tipo, e.CNPJ, e.UltDFP, e.UltTri, e.Ativa})
+		it := item{t, e.Tickers, e.Nome, e.Setor, e.Tipo, e.CNPJ, e.UltDFP, e.UltTri, e.Ativa, nil}
+		if u, ok := ult12(e); ok {
+			it.Ult12 = &u
+		}
+		out = append(out, it)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Ticker < out[j].Ticker })
 	writeJSON(w, out)
