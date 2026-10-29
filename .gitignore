@@ -1,0 +1,11 @@
+# binários compilados
+fichab3
+fichab3completa
+*.exe
+*.app/
+# dados locais e segredos
+config.json
+*.sqlite
+*.log
+cache/
+.DS_Store

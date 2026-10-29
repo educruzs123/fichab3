@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FichaB3Completa</title>
+<link rel="icon" href="/icone.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/estilo.css">
+</head>
+<body>
+<header class="topo">
+  <a class="marca" href="/"><img src="/icone.svg" alt="" width="24" height="24"><span>FichaB3Completa</span></a>
+  <form class="busca" id="busca-topo" autocomplete="off">
+    <input id="busca-topo-in" type="search" placeholder="Ticker ou empresa (ex.: BBDC3, Vale)" aria-label="Buscar ticker ou empresa">
+  </form>
+  <nav>
+    <a href="/" data-nav="inicio">Empresas</a>
+    <a href="/config" data-nav="config">Configuração</a>
+  </nav>
+</header>
+<main id="app"><p class="carregando">Carregando…</p></main>
+<div id="tip" class="tip" role="tooltip"></div>
+<script src="/graficos.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
