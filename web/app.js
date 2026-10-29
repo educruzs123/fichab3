@@ -185,7 +185,16 @@
     if (!fin) t2.append(tile('Dív. líquida / EBITDA', xv(m12.div_ebitda), m12.div_liq != null ? h('span', null, 'dívida líquida ', h('b', null, mi(m12.div_liq))) : ''));
     else t2.append(tile('Patrimônio líquido', mi(m12.pl), 'no ' + (f.ult_tri || '')));
     app.appendChild(t2);
-    app.appendChild(h('p', { class: 'desc' }, `Valores grandes: ${f.periodo_12m || 'últimos 12 meses'} (indicadores trimestrais da CVM). Abaixo de cada um, os anos fechados (DFP). ROE = lucro dos controladores ÷ patrimônio líquido médio.` + (f.contas.acoes === 'capital' ? ' Ações em circulação pela composição do capital informada à CVM (sem tesouraria).' : ' Ações estimadas pelo lucro ÷ lucro por ação.')));
+    const t3 = h('div', { class: 'tiles' }), cg = at.cagr || {};
+    if (!fin) t3.append(
+      tile('EV / EBITDA', xv(at.ev_ebitda), m12.ebitda != null ? h('span', null, 'EBITDA 12m ', h('b', null, mi(m12.ebitda))) : ''),
+      tile('FCL yield', pct(at.fcl_yield), at.fcl_ano ? h('span', null, 'FCL ' + at.fcl_ano + ': ', h('b', null, mi(at.fcl))) : ''));
+    t3.append(
+      tile('ROA 12m', pct(m12.roa), hist('roa')),
+      tile('CAGR receita 5a', pct(cg.receita_5a), h('span', null, '10 anos: ', h('b', null, pct(cg.receita_10a)), cg.ano_fim ? ' · até ' + cg.ano_fim : '')),
+      tile('CAGR lucro 5a', pct(cg.lucro_5a), h('span', null, '10 anos: ', h('b', null, pct(cg.lucro_10a)), cg.ano_fim ? ' · até ' + cg.ano_fim : '')));
+    app.appendChild(t3);
+    app.appendChild(h('p', { class: 'desc' }, `Valores grandes: ${f.periodo_12m || 'últimos 12 meses'} (indicadores trimestrais da CVM). Abaixo de cada um, os anos fechados (DFP). ROE = lucro dos controladores ÷ patrimônio líquido médio. ROA = lucro líquido ÷ ativo total médio. CAGR = crescimento anual composto entre anos fechados (sem valor quando um dos anos tem prejuízo).` + (fin ? '' : ' EV = valor de mercado + dívida líquida. FCL (fluxo de caixa livre) = FCO − capex do último ano fechado; FCL yield = FCL ÷ valor de mercado atual.') + (f.contas.acoes === 'capital' ? ' Ações em circulação pela composição do capital informada à CVM (sem tesouraria).' : ' Ações estimadas pelo lucro ÷ lucro por ação.')));
 
     // escala dos gráficos em R$ bi ou mi
     const maxRec = Math.max(...A.map(r => Math.abs(r.receita || 0)), 1);
@@ -250,9 +259,9 @@
         fmtEsq: fa, fmtDir: v => N1.format(v) + 'x', tooltip: i => [['Dívida bruta', mi(A[i].div_bruta)], ['Caixa e aplicações', mi(A[i].caixa)], ['Dívida líquida', mi(A[i].div_liq), C1], ['Dív. líq. / EBITDA', xv(A[i].div_ebitda), C2]] });
       // fluxo de caixa
       const gF = h('div', { class: 'graf' });
-      app.appendChild(card(h('h2', null, 'Geração de caixa'), h('p', { class: 'desc' }, `Caixa das operações (FCO), investimentos em imobilizado e intangível (capex) e proventos pagos, ${un}.`), gF));
-      G.categorias(gF, { cats: fech.map(r => r.rotulo), series: [{ nome: 'FCO', cor: C1, vals: fech.map(r => ok(r.fco) ? r.fco / div : null) }, { nome: 'Capex', cor: C2, vals: fech.map(r => ok(r.capex) ? r.capex / div : null) }, { nome: 'Proventos pagos', cor: C4, vals: fech.map(r => ok(r.proventos) ? r.proventos / div : null) }],
-        fmtEsq: fa, tooltip: i => { const r = fech[i]; return [['FCO', mi(r.fco), C1], ['Capex', mi(r.capex), C2], ['FCO − capex', mi(ok(r.fco) && ok(r.capex) ? r.fco - r.capex : null)], ['Proventos pagos', mi(r.proventos), C4], ['Recompras', r.recompras ? mi(r.recompras) : null]]; } });
+      app.appendChild(card(h('h2', null, 'Geração de caixa'), h('p', { class: 'desc' }, `Barras: caixa das operações (FCO), investimentos em imobilizado e intangível (capex) e proventos pagos; linha: fluxo de caixa livre (FCO − capex), ${un}.`), gF));
+      G.categorias(gF, { cats: fech.map(r => r.rotulo), series: [{ nome: 'FCO', cor: C1, vals: fech.map(r => ok(r.fco) ? r.fco / div : null) }, { nome: 'Capex', cor: C2, vals: fech.map(r => ok(r.capex) ? r.capex / div : null) }, { nome: 'Proventos pagos', cor: C4, vals: fech.map(r => ok(r.proventos) ? r.proventos / div : null) }, { nome: 'Fluxo de caixa livre', tipo: 'linha', cor: C3, vals: fech.map(r => ok(r.fcl) ? r.fcl / div : null) }],
+        fmtEsq: fa, tooltip: i => { const r = fech[i]; return [['FCO', mi(r.fco), C1], ['Capex', mi(r.capex), C2], ['Fluxo de caixa livre', mi(r.fcl), C3], ['FCL yield', pct(r.fcl_yield)], ['Proventos pagos', mi(r.proventos), C4], ['Recompras', r.recompras ? mi(r.recompras) : null]]; } });
     }
 
     // tabela anual
@@ -260,9 +269,11 @@
     if (!fin) colsA.push(['EBIT', r => miN(r.ebit)]); else colsA.push(['Res. antes trib.', r => miN(r.ebit)]);
     colsA.push(['Lucro ctrl.', r => miN(r.lucro_ctrl)], ['Mg. bruta', r => pct(r.margem_bruta)]);
     if (!fin) colsA.push(['Mg. EBIT', r => pct(r.margem_ebit)]);
-    colsA.push(['Mg. líq.', r => pct(r.margem_liq)], ['ROE', r => pct(r.roe)], ['LPA', r => rs(r.lpa)], ['Ativo total', r => miN(r.ativo)], ['PL', r => miN(r.pl)]);
-    if (!fin) colsA.push(['Caixa', r => miN(r.caixa)], ['Dív. bruta', r => miN(r.div_bruta)], ['Dív. líq.', r => miN(r.div_liq)], ['DL/EBITDA', r => xv(r.div_ebitda)], ['FCO', r => miN(r.fco)], ['Capex', r => miN(r.capex)]);
-    colsA.push(['Proventos', r => miN(r.proventos)], ['Payout', r => pct(r.payout)], ['Preço', r => rs(r.preco)], ['P/L', r => xv(r.p_l)], ['P/VP', r => xv(r.p_vp)], ['DY', r => pct(r.parcial ? r.dy_data_com : r.dy)]);
+    colsA.push(['Mg. líq.', r => pct(r.margem_liq)], ['ROE', r => pct(r.roe)], ['ROA', r => pct(r.roa)], ['LPA', r => rs(r.lpa)], ['Ativo total', r => miN(r.ativo)], ['PL', r => miN(r.pl)]);
+    if (!fin) colsA.push(['EBITDA', r => miN(r.ebitda)], ['Caixa', r => miN(r.caixa)], ['Dív. bruta', r => miN(r.div_bruta)], ['Dív. líq.', r => miN(r.div_liq)], ['DL/EBITDA', r => xv(r.div_ebitda)], ['FCO', r => miN(r.fco)], ['Capex', r => miN(r.capex)], ['FCL', r => miN(r.fcl)]);
+    colsA.push(['Proventos', r => miN(r.proventos)], ['Payout', r => pct(r.payout)], ['Preço', r => rs(r.preco)], ['P/L', r => xv(r.p_l)], ['P/VP', r => xv(r.p_vp)]);
+    if (!fin) colsA.push(['EV/EBITDA', r => xv(r.ev_ebitda)], ['FCL yield', r => pct(r.fcl_yield)]);
+    colsA.push(['DY', r => pct(r.parcial ? r.dy_data_com : r.dy)]);
     app.appendChild(card(h('h2', null, 'Histórico anual'), h('p', { class: 'desc' }, 'Valores em R$ milhões, exceto por ação, preços e percentuais. Linha em itálico: período parcial (12 meses).'),
       h('div', { class: 'tabela-wrap' }, h('table', { class: 't' }, h('thead', null, h('tr', null, colsA.map((c, i) => h('th', { class: i ? 'n' : '' }, c[0])))),
         h('tbody', null, A.slice().reverse().map(r => h('tr', { class: r.parcial ? 'parcial' : '' }, colsA.map((c, i) => h('td', { class: i ? 'n' : '' }, c[1](r))))))))));

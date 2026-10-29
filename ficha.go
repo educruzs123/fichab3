@@ -35,8 +35,13 @@ type AnoRow struct {
 	DivBruta    *float64 `json:"div_bruta"`
 	DivLiq      *float64 `json:"div_liq"`
 	DivEBITDA   *float64 `json:"div_ebitda"`
+	EBITDA      *float64 `json:"ebitda"`
+	EVEBITDA    *float64 `json:"ev_ebitda"`
+	ROA         *float64 `json:"roa"`
 	FCO         *float64 `json:"fco"`
 	Capex       *float64 `json:"capex"`
+	FCL         *float64 `json:"fcl"`
+	FCLYield    *float64 `json:"fcl_yield"`
 	Proventos   *float64 `json:"proventos"`
 	Recompras   *float64 `json:"recompras"`
 	Payout      *float64 `json:"payout"`
@@ -756,6 +761,7 @@ func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
 	if n > 0 {
 		f.PLMedia = fp(s / float64(n))
 	}
+	indicadoresExtras(f, rows, tris)
 	f.Anual = rows
 
 	// últimos 12 trimestres
@@ -960,4 +966,119 @@ func listaAnos(a []int) string {
 	}
 	flush()
 	return strings.Join(out, ", ")
+}
+
+// EBITDA, EV/EBITDA, ROA, fluxo de caixa livre e CAGR, a partir do que a ficha já calculou.
+func indicadoresExtras(f *Ficha, rows []AnoRow, tris []Tri) {
+	t4 := map[int]Tri{}
+	triIdx := map[int]Tri{}
+	for _, t := range tris {
+		if strings.HasPrefix(t.Tri, "4T") {
+			t4[t.Ano] = t
+		}
+		triIdx[triKey(t.Ano, t.Tri)] = t
+	}
+	var last *Tri
+	if n := len(tris); n > 0 {
+		last = &tris[n-1]
+	}
+	// valor da firma = valor de mercado + dívida líquida; só vale com EBITDA positivo
+	ev := func(vmBi, divLiq, ebitda *float64) *float64 {
+		if vmBi == nil || divLiq == nil || ebitda == nil || *ebitda <= 0 {
+			return nil
+		}
+		return fp((*vmBi*1000 + *divLiq) / *ebitda)
+	}
+	media := func(a, b *float64) *float64 {
+		if a == nil || b == nil {
+			return a
+		}
+		return fp((*a + *b) / 2)
+	}
+	for i := range rows {
+		r := &rows[i]
+		ativoAnt := (*float64)(nil)
+		if r.Parcial && last != nil {
+			// ativo de 4 trimestres antes, para a média dos 12 meses
+			if t, ok := triIdx[triKey(last.Ano-1, last.Tri)]; ok {
+				ativoAnt = t.Ativo
+			}
+		} else if i > 0 && rows[i-1].Ano == r.Ano-1 && !rows[i-1].Parcial {
+			ativoAnt = rows[i-1].Ativo
+		}
+		r.ROA = div(r.Lucro, media(r.Ativo, ativoAnt))
+		if f.Financeira {
+			continue
+		}
+		if r.Parcial {
+			if last != nil {
+				r.EBITDA = last.EBITDA12
+			}
+		} else if t, ok := t4[r.Ano]; ok {
+			r.EBITDA = t.EBITDA12
+		}
+		r.EVEBITDA = ev(r.VMbi, r.DivLiq, r.EBITDA)
+		if r.Capex != nil {
+			r.FCL = sub(r.FCO, r.Capex)
+		}
+		if r.FCL != nil && r.VMbi != nil && *r.VMbi > 0 {
+			r.FCLYield = fp(*r.FCL / (*r.VMbi * 1000))
+		}
+	}
+
+	// 12 meses e valor de mercado atual
+	if m, ok := f.Atual["doze_meses"].(map[string]any); ok && last != nil {
+		lu, _ := m["lucro"].(*float64)
+		var ativoAnt *float64
+		if t, ok := triIdx[triKey(last.Ano-1, last.Tri)]; ok {
+			ativoAnt = t.Ativo
+		}
+		m["roa"] = div(lu, media(last.Ativo, ativoAnt))
+	}
+	if !f.Financeira {
+		vm, _ := f.Atual["valor_mercado_bi"].(float64)
+		if vm > 0 {
+			if last != nil {
+				f.Atual["ev_ebitda"] = ev(&vm, last.DivLiq, last.EBITDA12)
+			}
+			// FCL do último ano fechado sobre o valor de mercado de hoje
+			for i := len(rows) - 1; i >= 0; i-- {
+				if r := rows[i]; !r.Parcial && r.FCL != nil {
+					f.Atual["fcl_yield"] = fp(*r.FCL / (vm * 1000))
+					f.Atual["fcl_ano"] = r.Ano
+					f.Atual["fcl"] = r.FCL
+					break
+				}
+			}
+		}
+	}
+
+	// CAGR de receita e lucro dos controladores, entre anos fechados
+	fech := map[int]AnoRow{}
+	fim := 0
+	for _, r := range rows {
+		if !r.Parcial {
+			fech[r.Ano] = r
+			if r.Ano > fim {
+				fim = r.Ano
+			}
+		}
+	}
+	cagr := func(get func(AnoRow) *float64, anos int) *float64 {
+		a, okA := fech[fim-anos]
+		b, okB := fech[fim]
+		if !okA || !okB {
+			return nil
+		}
+		va, vb := get(a), get(b)
+		if va == nil || vb == nil || *va <= 0 || *vb <= 0 {
+			return nil
+		}
+		return fp(math.Pow(*vb / *va, 1/float64(anos)) - 1)
+	}
+	rec := func(r AnoRow) *float64 { return r.Receita }
+	luc := func(r AnoRow) *float64 { return r.LucroCtrl }
+	f.Atual["cagr"] = map[string]any{"ano_fim": fim,
+		"receita_5a": cagr(rec, 5), "receita_10a": cagr(rec, 10),
+		"lucro_5a": cagr(luc, 5), "lucro_10a": cagr(luc, 10)}
 }
