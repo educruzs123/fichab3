@@ -36,6 +36,10 @@ type Supa struct {
 	cacheEm map[int]time.Time
 	res12   map[int]Ult12
 	res12Em time.Time
+	cot     map[string]cotCache
+	merc    map[string]Mercado
+	acoes   map[int]Acoes
+	mercEm  time.Time
 }
 
 func NovoSupa(u, k string) *Supa {
@@ -196,7 +200,7 @@ func (s *Supa) Ultimos12(forcar bool) (map[int]Ult12, error) {
 		Tri
 	}
 	q := url.Values{}
-	q.Set("select", "empresa_id,ano,tri,receita_12m,lucro_12m,roe_12m,div_ebitda_12m,pl")
+	q.Set("select", "empresa_id,ano,tri,receita_12m,lucro_12m,lucro_ctrl,roe_12m,div_ebitda_12m,pl")
 	// shortcut: só os 2 últimos anos; empresa sem trimestre recente fica sem os números
 	q.Set("ano", "gte."+strconv.Itoa(time.Now().Year()-2))
 	q.Set("order", "empresa_id,dt_refer")
@@ -204,9 +208,13 @@ func (s *Supa) Ultimos12(forcar bool) (map[int]Ult12, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := map[int]Ult12{}
+	porEmp := map[int][]Tri{}
 	for _, l := range rows {
-		r[l.EmpresaID] = ult12De(l.Tri) // ordenado por data: fica o último
+		porEmp[l.EmpresaID] = append(porEmp[l.EmpresaID], l.Tri) // já em ordem de data
+	}
+	r := map[int]Ult12{}
+	for id, tris := range porEmp {
+		r[id] = ult12De(tris)
 	}
 	s.mu.Lock()
 	s.res12, s.res12Em = r, time.Now()
@@ -372,4 +380,157 @@ func (s *Supa) Dados(e *Empresa, forcar bool) (*EmpData, error) {
 	s.cacheEm[e.ID] = time.Now()
 	s.mu.Unlock()
 	return d, nil
+}
+
+// Cotações mensais do ticker (tabela cotacoes_mensais), guardadas por 30 minutos.
+// O banco traz fechamento e proventos já ajustados por desdobramentos e bonificações;
+// aqui eles voltam ao valor da época (como a Alpha Vantage entrega), e os eventos
+// seguem à parte em Splits, para a ficha ajustar também o lucro por ação da CVM.
+func (s *Supa) Cotacoes(ticker string, forcar bool) (*Serie, error) {
+	s.mu.Lock()
+	if c, ok := s.cot[ticker]; ok && !forcar && time.Since(c.em) < 30*time.Minute {
+		s.mu.Unlock()
+		return c.serie, nil
+	}
+	s.mu.Unlock()
+	type linha struct {
+		Data       string  `json:"data"`
+		Fechamento float64 `json:"fechamento"`
+		Ajustado   float64 `json:"ajustado"`
+		Dividendos float64 `json:"dividendos"`
+		Split      float64 `json:"split"`
+	}
+	q := url.Values{"select": {"data,fechamento,ajustado,dividendos,split"}, "ticker": {"eq." + ticker}, "order": {"mes"}}
+	rows, err := supaTodos[linha](s, "cotacoes_mensais", q)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, errors.New("sem cotações no Supabase para " + ticker)
+	}
+	splits := []Split{}
+	for _, r := range rows {
+		if r.Split > 0 && r.Split != 1 {
+			splits = append(splits, Split{Data: r.Data, Fator: r.Split})
+		}
+	}
+	pts := make([]Ponto, 0, len(rows))
+	for _, r := range rows {
+		if r.Fechamento <= 0 {
+			continue
+		}
+		f := fatorEntre(splits, r.Data, "9999") // eventos depois deste mês
+		pts = append(pts, Ponto{Data: r.Data, Close: r.Fechamento * f, Adj: r.Ajustado, Div: r.Dividendos * f})
+	}
+	ult := rows[len(rows)-1].Data
+	sr := &Serie{Pontos: pts, Splits: splits, SimboloAV: ticker, BaixadoEm: ult[8:10] + "/" + ult[5:7] + "/" + ult[:4],
+		Fonte: "banco fichas-b3 no Supabase (cotações mensais até " + ult[8:10] + "/" + ult[5:7] + "/" + ult[:4] + ")"}
+	s.mu.Lock()
+	if s.cot == nil {
+		s.cot = map[string]cotCache{}
+	}
+	s.cot[ticker] = cotCache{sr, time.Now()}
+	s.mu.Unlock()
+	return sr, nil
+}
+
+type cotCache struct {
+	serie *Serie
+	em    time.Time
+}
+
+// Mercado: cotação, variação e proventos de 12 meses de um ticker, para a lista
+type Mercado struct {
+	Preco  float64
+	Var12  *float64
+	DY12   float64
+	Splits []Split // do último ano, para trazer as ações da CVM à base atual
+}
+
+// Acoes: ações em circulação informadas à CVM e a data da informação
+type Acoes struct {
+	Qt   float64
+	Data string
+}
+
+// Último ano de cotações de todos os tickers e ações em circulação de cada empresa
+// (por id), em poucas consultas; guardado por 15 minutos.
+func (s *Supa) Mercados(forcar bool) (map[string]Mercado, map[int]Acoes, error) {
+	s.mu.Lock()
+	if !forcar && s.merc != nil && time.Since(s.mercEm) < 15*time.Minute {
+		m, a := s.merc, s.acoes
+		s.mu.Unlock()
+		return m, a, nil
+	}
+	s.mu.Unlock()
+	type cot struct {
+		Ticker     string  `json:"ticker"`
+		Data       string  `json:"data"`
+		Fechamento float64 `json:"fechamento"`
+		Ajustado   float64 `json:"ajustado"`
+		Dividendos float64 `json:"dividendos"`
+		Split      float64 `json:"split"`
+	}
+	ini := time.Now().AddDate(-1, -2, 0).Format("2006-01-02")
+	cs, err := supaTodos[cot](s, "cotacoes_mensais", url.Values{"select": {"ticker,data,fechamento,ajustado,dividendos,split"}, "data": {"gte." + ini}, "order": {"ticker,mes"}})
+	if err != nil {
+		return nil, nil, err
+	}
+	porTk := map[string][]cot{}
+	for _, c := range cs {
+		if c.Fechamento > 0 {
+			porTk[c.Ticker] = append(porTk[c.Ticker], c)
+		}
+	}
+	merc := map[string]Mercado{}
+	for tk, l := range porTk {
+		u := l[len(l)-1]
+		ud, _ := time.Parse("2006-01-02", u.Data)
+		corte := ud.AddDate(-1, 0, 0).Format("2006-01-02")
+		m := Mercado{Preco: u.Fechamento}
+		for i, c := range l {
+			if c.Split > 0 && c.Split != 1 {
+				m.Splits = append(m.Splits, Split{Data: c.Data, Fator: c.Split})
+			}
+			if c.Data <= corte {
+				m.Var12 = fp(u.Fechamento/c.Fechamento - 1) // fica o último mês até 12 meses antes
+				continue
+			}
+			if i == 0 || c.Ajustado <= 0 || l[i-1].Ajustado <= 0 {
+				continue
+			}
+			// a coluna de proventos é incompleta: o rendimento sai do salto no fechamento
+			// ajustado, como na ficha (os dois preços já estão na mesma base de ações)
+			a := l[i-1]
+			y := 1 - (a.Ajustado/a.Fechamento)/(c.Ajustado/c.Fechamento)
+			if y < 0 || y > 0.5 {
+				y = c.Dividendos / a.Fechamento
+			}
+			if y >= 0.001 || c.Dividendos > 0 {
+				m.DY12 += y
+			}
+		}
+		merc[tk] = m
+	}
+	type capt struct {
+		EmpresaID int     `json:"empresa_id"`
+		Data      string  `json:"dt_refer"`
+		Total     float64 `json:"qt_total"`
+		Tes       float64 `json:"tes_total"`
+	}
+	ini = time.Now().AddDate(-2, 0, 0).Format("2006-01-02")
+	caps, err := supaTodos[capt](s, "capital", url.Values{"select": {"empresa_id,dt_refer,qt_total,tes_total"}, "dt_refer": {"gte." + ini}, "order": {"empresa_id,dt_refer"}})
+	if err != nil {
+		return nil, nil, err
+	}
+	acoes := map[int]Acoes{}
+	for _, c := range caps {
+		if c.Total > 0 {
+			acoes[c.EmpresaID] = Acoes{c.Total - c.Tes, c.Data} // ordenado por data: fica a última
+		}
+	}
+	s.mu.Lock()
+	s.merc, s.acoes, s.mercEm = merc, acoes, time.Now()
+	s.mu.Unlock()
+	return merc, acoes, nil
 }

@@ -95,19 +95,22 @@
     app.appendChild(inp);
     const so = h('label', { class: 'status', style: 'display:inline-flex;gap:6px;align-items:center;margin:0 0 10px' }, h('input', { type: 'checkbox', checked: true }), 'Só companhias ativas na CVM');
     app.appendChild(so);
-    // colunas: título, valor para ordenar, célula, classe (n = número; s1/s2 somem em telas estreitas)
+    // colunas: título, valor para ordenar, célula, classe (n = número; s0/s1/s2 somem em telas cada vez mais estreitas)
     const triN = t => { const m = /^(\d)T(\d\d)$/.exec(t || ''); return m ? +m[2] * 10 + +m[1] : null; };
     const num = (k, fmt, neg) => [e => e[k], e => h('td', { class: 'n' + (neg && e[k] < 0 ? ' down' : '') }, fmt(e[k]))];
     const cols = [
       ['Ticker', e => e.ticker, e => h('td', null, h('a', { href: '/ficha?t=' + encodeURIComponent(e.ticker) }, e.ticker), e.tickers.length > 1 ? h('span', { class: 'status' }, ' ' + e.tickers.slice(1).join(' ')) : null)],
       ['Empresa', e => e.nome, e => h('td', null, e.nome)],
       ['Setor', e => e.setor, e => h('td', null, e.setor || '—'), 's1'],
-      ['Receita 12m', ...num('receita_12m', mi), 'n s2'],
-      ['Lucro 12m', ...num('lucro_12m', mi, true), 'n s2'],
-      ['Mg. líq.', ...num('margem_liq_12m', pct, true), 'n'],
+      ['Cotação', e => e.cotacao, e => h('td', { title: e.var_12m != null ? 'Em 12 meses: ' + pctS(e.var_12m) : null }, rs(e.cotacao)), 'n s2'],
+      ['P/L', e => e.p_l, e => h('td', null, xv(e.p_l)), 'n'],
+      ['DY 12m', ...num('dy_12m', pct), 'n s2'],
+      ['Mg. líq.', ...num('margem_liq_12m', pct, true), 'n s1'],
       ['ROE', ...num('roe_12m', pct, true), 'n'],
-      ['Dív. líq./EBITDA', ...num('div_ebitda_12m', xv), 'n s2'],
-      ['Dados até', e => triN(e.tri || e.ult_tri), e => h('td', null, e.tri || e.ult_tri || '—'), 'n s1'],
+      ['Receita 12m', ...num('receita_12m', mi), 'n s0'],
+      ['Lucro 12m', ...num('lucro_12m', mi, true), 'n s0'],
+      ['Dív. líq./EBITDA', ...num('div_ebitda_12m', xv), 'n s1'],
+      ['Dados até', e => triN(e.tri || e.ult_tri), e => h('td', null, e.tri || e.ult_tri || '—'), 'n s0'],
     ];
     let ordem = { i: 0, dir: 1 };
     const cab = h('tr');
@@ -115,7 +118,7 @@
     const cont = h('p', { class: 'status' });
     app.appendChild(h('div', { class: 'tabela-wrap', style: 'max-height:none' }, h('table', { class: 't lista' }, h('thead', null, cab), corpo)));
     app.appendChild(cont);
-    app.appendChild(h('p', { class: 'desc' }, 'Números dos 12 meses até o último trimestre informado à CVM. Clique no título de uma coluna para ordenar.'));
+    app.appendChild(h('p', { class: 'desc' }, 'Números dos 12 meses até o último trimestre informado à CVM; cotação, P/L e DY pelas cotações mensais do Supabase (P/L sobre o lucro dos controladores). Clique no título de uma coluna para ordenar.'));
     let es = [];
     try { es = await empresas(); } catch (e) { cont.textContent = e.message; return; }
     const norm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();

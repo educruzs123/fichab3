@@ -1,4 +1,4 @@
-FichaB3Completa 1.4 — fichas de ações da B3 a partir da sua base local da CVM
+FichaB3Completa 1.5 — fichas de ações da B3 a partir da sua base local da CVM
 =====================================================================
 
 INSTALAR
@@ -23,14 +23,15 @@ O FichaB3Completa abre no seu navegador, em http://127.0.0.1:47321
    tem todas as companhias da CVM (2010 em diante) e se atualiza sozinho todo
    domingo. Não precisa baixar nada: a conexão já vem configurada.
    Em Configuração › Fonte dos dados, o botão "Testar" mostra se está tudo ok.
-2. Cole sua chave da Alpha Vantage (gratuita em alphavantage.co) e clique em
-   "Salvar" e "Testar". Ela é usada para cotação, P/L e dividend yield.
+2. As cotações (P/L, dividend yield, valor de mercado) também vêm do Supabase.
+   A chave da Alpha Vantage (gratuita em alphavantage.co) é opcional: só é
+   usada para ações sem cotação no banco, ou com a fonte "Arquivos da CVM no Mac".
 Opcional: em Fonte dos dados, "Arquivos da CVM no Mac" volta a usar os zips
 baixados para uma pasta do Mac, sem depender da internet para os balanços.
 
 USAR
 Digite um ticker na busca (ex.: BBDC4, VALE3, LEVE3) ou escolha na lista.
-A lista mostra receita, lucro, margem, ROE e dívida dos últimos 12 meses;
+A lista mostra cotação, P/L, DY, margem, ROE, receita, lucro e dívida;
 clique no título de uma coluna para ordenar.
 Cada ficha tem receita, lucro e margens, ROE, ROA, P/L, EV/EBITDA,
 fluxo de caixa livre, crescimento médio (CAGR), cotação (1 a 10 anos),

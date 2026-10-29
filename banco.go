@@ -170,10 +170,25 @@ type Ult12 struct {
 	MLiq      *float64 `json:"margem_liq_12m"`
 	ROE       *float64 `json:"roe_12m"`
 	DivEBITDA *float64 `json:"div_ebitda_12m"`
+	PL        *float64 `json:"-"`
+	LucroCtrl *float64 `json:"-"` // dos controladores, 4 trimestres (como o P/L da ficha)
 }
 
-func ult12De(t Tri) Ult12 {
-	u := Ult12{Tri: t.Tri, Receita: t.Receita12, Lucro: t.Lucro12, MLiq: div(t.Lucro12, t.Receita12), ROE: t.ROE12, DivEBITDA: t.DivEBITDA12}
+// tris: trimestres da empresa em ordem de data
+func ult12De(tris []Tri) Ult12 {
+	t := tris[len(tris)-1]
+	u := Ult12{Tri: t.Tri, Receita: t.Receita12, Lucro: t.Lucro12, MLiq: div(t.Lucro12, t.Receita12), ROE: t.ROE12, DivEBITDA: t.DivEBITDA12, PL: t.PL}
+	u.LucroCtrl = u.Lucro
+	if len(tris) >= 4 {
+		soma := 0.0
+		for _, x := range tris[len(tris)-4:] {
+			if x.LucroCtrl == nil {
+				return u
+			}
+			soma += *x.LucroCtrl
+		}
+		u.LucroCtrl = fp(soma)
+	}
 	// com patrimônio negativo (no fim ou na média), prejuízo vira ROE positivo
 	if (t.PL != nil && *t.PL <= 0) || (u.ROE != nil && *u.ROE > 0 && t.Lucro12 != nil && *t.Lucro12 < 0) {
 		u.ROE = nil
@@ -192,7 +207,7 @@ func (b *Banco) Ultimos12() map[string]Ult12 {
 	r = map[string]Ult12{}
 	for _, e := range b.Empresas {
 		if d, err := b.Dados(e.CNPJ); err == nil && len(d.Tri) > 0 {
-			r[e.CNPJ] = ult12De(d.Tri[len(d.Tri)-1])
+			r[e.CNPJ] = ult12De(d.Tri)
 		}
 	}
 	b.cacheMu.Lock()

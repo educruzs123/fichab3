@@ -186,8 +186,14 @@ func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
 	var pts []Ponto
 	if serie != nil {
 		pts = serie.Pontos
-		f.Splits = detectarSplits(pts)
-		f.FonteCot = "Alpha Vantage (" + serie.SimboloAV + "), baixado em " + serie.BaixadoEm
+		f.Splits = serie.Splits
+		if f.Splits == nil {
+			f.Splits = detectarSplits(pts)
+		}
+		f.FonteCot = serie.Fonte
+		if f.FonteCot == "" {
+			f.FonteCot = "Alpha Vantage (" + serie.SimboloAV + "), baixado em " + serie.BaixadoEm
+		}
 	}
 	fatorApos := func(data string) float64 { // splits depois da data
 		x := 1.0
@@ -714,7 +720,7 @@ func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
 			vm := *acoesHoje * lp.Close
 			f.Atual["acoes_mi"] = *acoesHoje
 			f.Atual["valor_mercado_bi"] = vm / 1000
-			if lucro12 != nil && *lucro12 != 0 {
+			if lucro12 != nil && math.Abs(*lucro12) >= 0.1 { // perto de zero, o P/L explode sem significado
 				f.Atual["p_l"] = vm / *lucro12
 				f.Atual["lpa_12m"] = *lucro12 / *acoesHoje
 			}
@@ -727,7 +733,7 @@ func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
 				r.PrecoData = lp.Data
 				r.VMbi = fp(vm / 1000)
 				r.Acoes = acoesHoje
-				if lucro12 != nil && *lucro12 != 0 {
+				if lucro12 != nil && math.Abs(*lucro12) >= 0.1 {
 					r.PLx = fp(vm / *lucro12)
 					r.LPA = fp(*lucro12 / *acoesHoje)
 				}

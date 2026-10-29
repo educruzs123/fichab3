@@ -27,6 +27,8 @@ type Serie struct {
 	DoCache   bool    `json:"do_cache"`
 	Desatual  bool    `json:"desatualizada"`
 	SimboloAV string  `json:"simbolo"`
+	Fonte     string  `json:"fonte,omitempty"`
+	Splits    []Split `json:"splits,omitempty"` // informados pela fonte; nil = detectar nos preços
 }
 
 var avClient = &http.Client{Timeout: 30 * time.Second}

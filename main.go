@@ -27,7 +27,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.4.0"
+const versao = "1.5.0"
 
 var (
 	appDir  string
@@ -476,6 +476,8 @@ func apiTestarSupabase(w http.ResponseWriter, r *http.Request) {
 func apiEmpresas(w http.ResponseWriter, r *http.Request) {
 	var b interface{ lista() []*Empresa }
 	ult12 := func(e *Empresa) (Ult12, bool) { return Ult12{}, false }
+	var merc map[string]Mercado
+	var acoes map[int]Acoes
 	if usaSupa() {
 		forcar := r.URL.Query().Get("atualizar") == "1"
 		l, err := fonteSupa().Lista(forcar)
@@ -488,6 +490,11 @@ func apiEmpresas(w http.ResponseWriter, r *http.Request) {
 			ult12 = func(e *Empresa) (Ult12, bool) { u, ok := res[e.ID]; return u, ok }
 		} else {
 			log.Printf("lista: sem os números de 12 meses do Supabase: %v", err)
+		}
+		if m, a, err := fonteSupa().Mercados(forcar); err == nil {
+			merc, acoes = m, a
+		} else {
+			log.Printf("lista: sem cotações do Supabase: %v", err)
 		}
 	} else {
 		bancoMu.RLock()
@@ -512,6 +519,10 @@ func apiEmpresas(w http.ResponseWriter, r *http.Request) {
 		UltTri  string   `json:"ult_tri"`
 		Ativa   bool     `json:"ativa"`
 		*Ult12
+		Cotacao *float64 `json:"cotacao,omitempty"`
+		Var12   *float64 `json:"var_12m,omitempty"`
+		DY12    *float64 `json:"dy_12m,omitempty"`
+		PLx     *float64 `json:"p_l,omitempty"`
 	}
 	out := []item{}
 	for _, e := range b.lista() {
@@ -519,9 +530,22 @@ func apiEmpresas(w http.ResponseWriter, r *http.Request) {
 		if len(e.Tickers) > 0 {
 			t = e.Tickers[0]
 		}
-		it := item{t, e.Tickers, e.Nome, e.Setor, e.Tipo, e.CNPJ, e.UltDFP, e.UltTri, e.Ativa, nil}
-		if u, ok := ult12(e); ok {
+		it := item{t, e.Tickers, e.Nome, e.Setor, e.Tipo, e.CNPJ, e.UltDFP, e.UltTri, e.Ativa, nil, nil, nil, nil, nil}
+		u, temU := ult12(e)
+		if temU {
 			it.Ult12 = &u
+		}
+		if m, ok := merc[t]; ok {
+			it.Cotacao, it.Var12, it.DY12 = fp(m.Preco), m.Var12, fp(m.DY12)
+			// lucro mínimo de R$ 100 mil: perto de zero, o P/L explode sem significado
+			if a := acoes[e.ID]; a.Qt > 0 && temU && u.LucroCtrl != nil && *u.LucroCtrl >= 0.1 && u.PL != nil && *u.PL > 0 {
+				vm := m.Preco * a.Qt * fatorEntre(m.Splits, a.Data, "9999") / 1e6 // R$ milhões, na base de ações de hoje
+				// a CVM às vezes informa as ações em milhares: valor de mercado 1000× menor que o normal
+				if vm / *u.PL < 0.02 {
+					vm *= 1000
+				}
+				it.PLx = fp(vm / *u.LucroCtrl)
+			}
 		}
 		out = append(out, it)
 	}
@@ -569,7 +593,17 @@ func apiFicha(w http.ResponseWriter, r *http.Request) {
 	cfgMu.Lock()
 	chave := cfg.ChaveAV
 	cfgMu.Unlock()
-	serie, avErr := ObterCotacoes(t, chave, filepath.Join(appDir, "cache"), forcar)
+	var serie *Serie
+	var avErr error
+	if usaSupa() {
+		serie, avErr = fonteSupa().Cotacoes(t, forcar)
+		if avErr != nil {
+			log.Printf("cotações do Supabase para %s: %v; tentando a Alpha Vantage", t, avErr)
+		}
+	}
+	if serie == nil {
+		serie, avErr = ObterCotacoes(t, chave, filepath.Join(appDir, "cache"), forcar)
+	}
 	f := MontarFicha(e, d, t, serie)
 	if usaSupa() {
 		f.Fonte = "supabase"
