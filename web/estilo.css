@@ -136,3 +136,6 @@ main:has(table.lista) { max-width: 1400px; }
   .card, .tile { box-shadow: none; break-inside: avoid; }
   .tabela-wrap { max-height: none; overflow: visible; }
 }
+details.log { margin: 0 0 14px; padding: 12px 16px; }
+details.log summary { cursor: pointer; }
+details.log summary .status { margin-left: 6px; }

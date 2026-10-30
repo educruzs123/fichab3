@@ -27,7 +27,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.7.0"
+const versao = "1.8.0"
 
 var (
 	appDir  string
@@ -186,6 +186,7 @@ func main() {
 	mux.HandleFunc("/api/atualizar-cvm", apiAtualizarCVM)
 	mux.HandleFunc("/api/testar-supabase", apiTestarSupabase)
 	mux.HandleFunc("/api/empresas", apiEmpresas)
+	mux.HandleFunc("/api/log-cvm", apiLogCVM)
 	mux.HandleFunc("/api/ficha", apiFicha)
 	mux.HandleFunc("/api/testar-chave", apiTestarChave)
 	mux.HandleFunc("/api/limpar-cache", apiLimparCache)
@@ -471,6 +472,19 @@ func apiTestarSupabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "meta": m, "empresas": len(l)})
+}
+
+func apiLogCVM(w http.ResponseWriter, r *http.Request) {
+	if !usaSupa() {
+		jsonErr(w, 409, "o log de inserções da CVM só existe com a fonte Supabase")
+		return
+	}
+	l, err := fonteSupa().LogCVM()
+	if err != nil {
+		jsonErr(w, 502, err.Error())
+		return
+	}
+	writeJSON(w, l)
 }
 
 func apiEmpresas(w http.ResponseWriter, r *http.Request) {
