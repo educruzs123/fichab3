@@ -110,6 +110,21 @@
     }
     const rec = store.get('recentes', []);
     if (rec.length) app.appendChild(h('p', { class: 'acoes', style: 'margin:0 0 14px' }, h('span', { class: 'status', style: 'align-self:center' }, 'Recentes:'), rec.slice(0, 10).map(t => h('a', { class: 'chip', href: '/ficha?t=' + encodeURIComponent(t) }, t))));
+    // telas de investidor: base comum (lucro, receita de pelo menos R$ 1 bi, sem recuperação judicial) + critério próprio
+    const base = e => e.lucro_12m > 0 && e.receita_12m >= 1000 && !/RECUPERA[ÇC][ÃA]O JUDICIAL/i.test(e.nome);
+    const telas = [
+      { nome: 'Todas', ok: () => true, col: 'Ticker', dir: 1, desc: '' },
+      { nome: 'Baratas', ok: e => base(e) && e.p_l > 0 && e.p_l <= 8 && e.roe_12m >= .15, col: 'P/L', dir: 1, desc: 'P/L até 8x com ROE de pelo menos 15%.' },
+      { nome: 'Dividendos', ok: e => base(e) && e.p_l > 0 && e.dy_12m >= .06 && e.dy_12m <= .2, col: 'DY 12m', dir: -1, desc: 'DY entre 6% e 20%. Acima disso costuma ser pagamento extraordinário.' },
+      { nome: 'Rentáveis', ok: e => base(e) && e.roe_12m >= .2 && e.margem_liq_12m >= .1, col: 'ROE', dir: -1, desc: 'ROE de pelo menos 20% e margem líquida de pelo menos 10%.' },
+      { nome: 'Sem dívida', ok: e => base(e) && e.div_ebitda_12m != null && e.div_ebitda_12m <= .5, col: 'Dív. líq./EBITDA', dir: 1, desc: 'Dívida líquida de até 0,5x o EBITDA, incluindo caixa líquido. Bancos não entram.' },
+    ];
+    let tela = telas[0];
+    const segTelas = h('div', { class: 'seg', role: 'group', 'aria-label': 'Telas de investidor' });
+    const selSetor = h('select', { 'aria-label': 'Filtrar por setor', class: 'sel-setor' }, h('option', { value: '' }, 'Todos os setores'));
+    const descTela = h('p', { class: 'desc', style: 'margin:0 0 10px;min-height:1.5em' });
+    app.appendChild(h('div', { class: 'telas' }, segTelas, selSetor));
+    app.appendChild(descTela);
     const inp = h('input', { type: 'search', placeholder: 'Filtrar por ticker, nome ou setor', value: q0, style: 'width:100%;font:inherit;padding:9px 12px;border-radius:10px;border:1px solid var(--ln);background:var(--card);color:var(--tx);margin-bottom:12px' });
     app.appendChild(inp);
     const so = h('label', { class: 'status', style: 'display:inline-flex;gap:6px;align-items:center;margin:0 0 10px' }, h('input', { type: 'checkbox', checked: true }), 'Só companhias ativas na CVM');
@@ -142,6 +157,18 @@
     let es = [];
     try { es = await empresas(); } catch (e) { cont.textContent = e.message; return; }
     const norm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    // a CVM usa nomes diferentes para o mesmo setor
+    const nomeSetor = s => ({ 'Const. Civil, Mat. Const. e Decoração': 'Construção Civil, Mat. Constr. e Decoração', 'Máqs., Equip., Veíc. e Peças': 'Máquinas, Equipamentos, Veículos e Peças' })[(s || '').replace('Emp. Adm. Part. - ', '')] || (s || '').replace('Emp. Adm. Part. - ', '');
+    [...new Set(es.map(e => nomeSetor(e.setor)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')).forEach(x => selSetor.appendChild(h('option', { value: x }, x)));
+    const botoesTela = telas.map(t => h('button', { type: 'button', 'aria-pressed': String(t === tela), onclick: () => {
+      tela = t;
+      ordem = { i: cols.findIndex(c => c[0] === t.col), dir: t.dir };
+      botoesTela.forEach((b, i) => b.setAttribute('aria-pressed', String(telas[i] === tela)));
+      descTela.textContent = t.desc ? t.desc + ' Receita de pelo menos R$ 1 bi, com lucro e sem recuperação judicial.' : '';
+      cabecalho(); desenhar();
+    } }, t.nome));
+    segTelas.append(...botoesTela);
+    selSetor.addEventListener('change', () => desenhar());
     function cabecalho() {
       cab.textContent = '';
       cols.forEach((c, i) => cab.appendChild(h('th', { class: c[3] || '', 'aria-sort': ordem.i === i ? (ordem.dir > 0 ? 'ascending' : 'descending') : 'none' },
@@ -150,7 +177,7 @@
     }
     function desenhar() {
       const q = norm(inp.value.trim()), soAt = so.querySelector('input').checked;
-      const lista = es.filter(e => (!soAt || e.ativa) && (!q || norm(e.tickers.join(' ') + ' ' + e.nome + ' ' + e.setor).includes(q)));
+      const lista = es.filter(e => (!soAt || e.ativa) && tela.ok(e) && (!selSetor.value || nomeSetor(e.setor) === selSetor.value) && (!q || norm(e.tickers.join(' ') + ' ' + e.nome + ' ' + e.setor).includes(q)));
       const chave = cols[ordem.i][1];
       // vazios sempre no fim, nos dois sentidos
       lista.sort((a, b) => { const x = chave(a), y = chave(b), vx = x == null || x === '', vy = y == null || y === ''; if (vx || vy) return vx - vy; return (typeof x === 'string' ? x.localeCompare(y, 'pt-BR') : x - y) * ordem.dir; });

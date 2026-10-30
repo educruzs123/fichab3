@@ -143,3 +143,8 @@ table.itr td.cod { color: var(--mu); font-variant-numeric: tabular-nums; }
 table.itr td.conta { white-space: normal; min-width: 16em; }
 table.itr td.n3 { padding-left: 22px; } table.itr td.n4 { padding-left: 34px; color: var(--mu); }
 table.itr tr.forte td { font-weight: 600; }
+.telas { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin: 0 0 6px; }
+.telas .seg { max-width: 100%; overflow-x: auto; }
+.telas .seg button { white-space: nowrap; }
+.sel-setor { font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 9px; border: 1px solid var(--ln); background: var(--card); color: var(--tx); max-width: 100%; min-width: 0; }
+.sel-setor:focus-visible { outline: 2px solid var(--a2); }
