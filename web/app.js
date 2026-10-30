@@ -137,7 +137,7 @@
     app.appendChild(so);
     app.appendChild(cont);
     app.appendChild(h('p', { class: 'desc' }, 'Números dos 12 meses até o último trimestre informado à CVM; cotação, P/L e DY pelas cotações mensais do Supabase (P/L sobre o lucro dos controladores). Clique no título de uma coluna para ordenar.'));
-    if (st.fonte === 'supabase') logCVM();
+    if (st.fonte === 'supabase') { logCVM(); logCotacoes(); }
     let es = [];
     try { es = await empresas(); } catch (e) { cont.textContent = e.message; return; }
     const norm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -163,6 +163,31 @@
     cabecalho();
     so.querySelector('input').addEventListener('change', desenhar);
     desenhar();
+  }
+
+  // situação da atualização de cotações, uma linha por ticker (não é histórico de execuções)
+  function logCotacoes() {
+    const resumo = h('p', { class: 'status', style: 'margin:0 0 6px' }, 'Carregando…');
+    const corpo = h('div');
+    app.appendChild(card(h('h2', null, 'Atualização das cotações'), resumo, corpo));
+    const quando = s => s ? new Date(s).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+    api('/api/log-cotacoes').then(l => {
+      if (!l.length) { resumo.textContent = 'nenhuma atualização registrada'; return; }
+      const com = l.filter(x => x.ult_pregao), semDados = l.length - l.filter(x => x.status === 'ok').length;
+      const ult = com.reduce((m, x) => x.ult_pregao > m ? x.ult_pregao : m, '');
+      const emDia = com.filter(x => x.ult_pregao === ult).length;
+      resumo.textContent = `${l.length} tickers · último pregão no banco: ${dataBR(ult)} (${emDia} tickers) · ${semDados} com erro · última execução em ${quando(l[0].atualizado_em)}`;
+      corpo.appendChild(h('p', { class: 'desc' }, 'Situação da última atualização de cada ticker, vinda do Yahoo Finance. A carga roda nos dias úteis entre 18h e 21h. O banco guarda só a execução mais recente de cada ticker, não o histórico.'));
+      corpo.appendChild(h('div', { class: 'tabela-wrap', style: 'max-height:360px' }, h('table', { class: 't' },
+        h('thead', null, h('tr', null, ['Atualizado em', 'Ticker', 'Último pregão', 'Fechamento', 'Detalhe', 'Situação'].map((c, i) => h('th', { class: i === 3 ? 'n' : '' }, c)))),
+        h('tbody', null, l.map(x => h('tr', null,
+          h('td', null, quando(x.atualizado_em)),
+          h('td', { style: 'white-space:normal' }, h('a', { href: '/ficha?t=' + encodeURIComponent(x.ticker) }, x.ticker), x.empresa ? [' ', h('span', { class: 'status' }, x.empresa)] : null),
+          h('td', null, x.ult_pregao ? dataBR(x.ult_pregao) : '—'),
+          h('td', { class: 'n' }, rs(x.fechamento)),
+          h('td', { style: 'white-space:normal' }, x.msg || '—'),
+          h('td', { class: x.status === 'ok' ? '' : 'down' }, x.status === 'ok' ? 'atualizado' : x.status || '—')))))));
+    }).catch(e => { resumo.textContent = e.message; });
   }
 
   // log das entregas das empresas à CVM (RAD) inseridas no banco, no fim da página

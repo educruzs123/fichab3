@@ -538,9 +538,18 @@ func (s *Supa) Mercados(forcar bool) (map[string]Mercado, map[int]Acoes, error) 
 // Log das entregas de documentos das empresas à CVM (RAD) inseridas no banco,
 // mais recentes primeiro; vem da função public.log_cvm_empresas (sql/log_cvm_empresas.sql).
 func (s *Supa) LogCVM() ([]json.RawMessage, error) {
-	l, err := supaTodos[json.RawMessage](s, "rpc/log_cvm_empresas", url.Values{})
-	if err != nil && strings.Contains(err.Error(), "log_cvm_empresas") {
-		return nil, errors.New("o log ainda não está ativado no banco: falta criar a função log_cvm_empresas (sql/log_cvm_empresas.sql)")
+	return s.rpcLog("log_cvm_empresas")
+}
+
+// Situação da atualização de cotações por ticker; função public.log_cotacoes (sql/log_cotacoes.sql).
+func (s *Supa) LogCotacoes() ([]json.RawMessage, error) {
+	return s.rpcLog("log_cotacoes")
+}
+
+func (s *Supa) rpcLog(funcao string) ([]json.RawMessage, error) {
+	l, err := supaTodos[json.RawMessage](s, "rpc/"+funcao, url.Values{})
+	if err != nil && strings.Contains(err.Error(), funcao) {
+		return nil, fmt.Errorf("o log ainda não está ativado no banco: falta criar a função %s (sql/%s.sql)", funcao, funcao)
 	}
 	return l, err
 }
