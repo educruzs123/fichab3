@@ -139,3 +139,7 @@ main:has(table.lista) { max-width: 1400px; }
 details.log { margin: 0 0 14px; padding: 12px 16px; }
 details.log summary { cursor: pointer; }
 details.log summary .status { margin-left: 6px; }
+table.itr td.cod { color: var(--mu); font-variant-numeric: tabular-nums; }
+table.itr td.conta { white-space: normal; min-width: 16em; }
+table.itr td.n3 { padding-left: 22px; } table.itr td.n4 { padding-left: 34px; color: var(--mu); }
+table.itr tr.forte td { font-weight: 600; }

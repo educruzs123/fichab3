@@ -63,6 +63,7 @@
   document.querySelectorAll('[data-nav]').forEach(a => { if ((rota === '/config' && a.dataset.nav === 'config') || (rota !== '/config' && a.dataset.nav === 'inicio' && rota === '/')) a.classList.add('ativo'); });
   if (rota === '/config') paginaConfig();
   else if (rota === '/ficha') paginaFicha(new URLSearchParams(location.search).get('t') || '');
+  else if (rota === '/itr') paginaITR(new URLSearchParams(location.search).get('t') || '', new URLSearchParams(location.search).get('dt') || '');
   else paginaInicio(new URLSearchParams(location.search).get('q') || '');
 
   // ---------- início ----------
@@ -172,6 +173,48 @@
           h('td', { class: 'n' }, miN(x.linhas)),
           h('td', { class: x.status === 'ok' ? '' : 'down', title: x.msg || null }, x.status === 'ok' ? 'inserido' : x.status)))))));
     }).catch(e => { resumo.textContent = e.message; });
+  }
+
+  // 2026-06-30 → 2T26
+  function triRot(dt) { return Math.ceil(+dt.slice(5, 7) / 3) + 'T' + dt.slice(2, 4); }
+
+  // ---------- demonstrações de um ITR ----------
+  async function paginaITR(t, dt) {
+    t = t.toUpperCase();
+    app.textContent = '';
+    app.appendChild(h('p', { class: 'carregando' }, 'Carregando o ITR…'));
+    let r;
+    try { r = await api('/api/itr?t=' + encodeURIComponent(t) + '&dt=' + encodeURIComponent(dt)); }
+    catch (e) { app.textContent = ''; app.appendChild(h('h1', null, t)); app.appendChild(aviso('erro', e.message, ' ', h('a', { href: '/ficha?t=' + encodeURIComponent(t) }, 'Voltar à ficha'))); return; }
+    const rot = triRot(r.dt), fim = dataBR(r.dt);
+    document.title = `${t} · ITR ${rot} — FichaB3Completa`;
+    app.textContent = '';
+    app.appendChild(h('p', { class: 'kicker' }, 'Demonstrações do ITR · ' + (r.base || '')));
+    app.appendChild(h('h1', null, `${r.empresa} · ITR ${rot}`));
+    app.appendChild(h('p', { class: 'sub' }, `Trimestre encerrado em ${fim}. Valores em R$ milhões, como estão no banco (dados da CVM); lucro por ação em R$. `, h('a', { href: '/ficha?t=' + encodeURIComponent(t) }, '← Ficha de ' + t)));
+    app.appendChild(h('p', { class: 'acoes', style: 'margin:0 0 18px' }, h('span', { class: 'status', style: 'align-self:center' }, 'Outros ITRs:'),
+      r.itrs.slice().reverse().map(d => d === r.dt ? h('span', { class: 'chip', 'aria-current': 'page' }, triRot(d)) : h('a', { class: 'chip cinza', href: '/itr?t=' + encodeURIComponent(t) + '&dt=' + d }, triRot(d)))));
+    const val = c => c.cod.startsWith('3.99') ? (c.valor == null ? '—' : N2.format(c.valor)) : miN(c.valor);
+    const nivel = cod => cod.split('.').length;
+    const celConta = c => [h('td', { class: 'cod' }, c.cod), h('td', { class: 'conta n' + Math.min(nivel(c.cod), 4) }, c.nome || '—')];
+    const mes = d => ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][+d.slice(5, 7) - 1];
+    const periodo = ini => mes(ini) + '–' + mes(r.dt) + '/' + r.dt.slice(2, 4);
+    // tabela com uma coluna de valor por início de período (DRE: trimestre e acumulado no ano)
+    const tabela = (contas, rotulo) => {
+      const inis = [...new Set(contas.map(c => c.dt_ini || ''))].sort().reverse();
+      const porCod = new Map();
+      contas.forEach(c => { if (!porCod.has(c.cod)) porCod.set(c.cod, { cod: c.cod, nome: c.nome, v: {} }); porCod.get(c.cod).v[c.dt_ini || ''] = c; });
+      const tri = ini => +r.dt.slice(5, 7) - +ini.slice(5, 7) === 2; // período de 3 meses
+      const tit = ini => !ini ? rotulo : (tri(ini) ? 'Trimestre (' : 'Acumulado (') + periodo(ini) + ')';
+      return h('div', { class: 'tabela-wrap', style: 'max-height:none' }, h('table', { class: 't itr' },
+        h('thead', null, h('tr', null, h('th', null, 'Conta'), h('th', null, 'Descrição'), inis.map(i => h('th', { class: 'n' }, tit(i))))),
+        h('tbody', null, [...porCod.values()].map(l => h('tr', { class: nivel(l.cod) <= 2 ? 'forte' : '' }, celConta(l), inis.map(i => h('td', { class: 'n' }, l.v[i] ? val(l.v[i]) : '—')))))));
+    };
+    app.appendChild(card(h('h2', null, 'Demonstração do resultado (DRE)'), tabela(r.dre, 'Valor')));
+    app.appendChild(h('div', { class: 'grade2 secao' },
+      card(h('h2', null, 'Ativo'), tabela(r.bp.filter(c => c.cod.startsWith('1')), 'Em ' + fim)),
+      card(h('h2', null, 'Passivo e patrimônio líquido'), tabela(r.bp.filter(c => c.cod.startsWith('2')), 'Em ' + fim))));
+    app.appendChild(card(h('h2', null, 'Fluxo de caixa (DFC)'), tabela(r.dfc, 'Valor')));
   }
 
   // ---------- ficha ----------
@@ -347,8 +390,13 @@
       colsT.push(['Lucro ctrl.', t => miN(t.lucro_ctrl)], ['Var. a/a', t => pctS(t.var_lucro)], ['Mg. líq.', t => pct(t.margem_liq)], ['ROE 12m', t => pct(t.roe_12m)], ['PL', t => miN(t.pl)]);
       if (!fin) colsT.push(['Dív. líq.', t => miN(t.div_liq)], ['DL/EBITDA 12m', t => xv(t.div_ebitda_12m)], ['FCO', t => miN(t.fco)]);
       const gT = h('div', { class: 'graf' }), gTM = h('div', { class: 'graf' });
+      const linksITR = h('p', { class: 'acoes', style: 'margin:0 0 12px' });
+      if (f.fonte === 'supabase') api('/api/itr?t=' + encodeURIComponent(f.ticker)).then(r => {
+        if (!r.itrs.length) return;
+        linksITR.append(h('span', { class: 'status', style: 'align-self:center' }, 'Demonstrações completas de cada ITR:'), ...r.itrs.slice().reverse().map(dt => h('a', { class: 'chip', href: '/itr?t=' + encodeURIComponent(f.ticker) + '&dt=' + dt }, triRot(dt))));
+      }).catch(() => {});
       app.appendChild(card(h('h2', null, 'Últimos trimestres'), h('p', { class: 'desc' }, 'Resultados de cada trimestre (ITR/DFP da CVM). À esquerda, ' + f.rotulo_receita.toLowerCase() + ' (' + un + '); à direita, margem líquida.'),
-        h('div', { class: 'grade2' }, gT, gTM),
+        linksITR, h('div', { class: 'grade2' }, gT, gTM),
         h('div', { class: 'tabela-wrap', style: 'margin-top:12px' }, h('table', { class: 't' }, h('thead', null, h('tr', null, colsT.map((c, i) => h('th', { class: i ? 'n' : '' }, c[0])))),
           h('tbody', null, T.slice().reverse().map(t => h('tr', null, colsT.map((c, i) => h('td', { class: i ? 'n' : '' }, c[1](t))))))))));
       const tipT = i => [[f.rotulo_receita, mi(T[i].receita), C1], ['Var. a/a', pctS(T[i].var_receita)], ['Lucro dos controladores', mi(T[i].lucro_ctrl)], ['Margem líquida', pct(T[i].margem_liq), C2]];

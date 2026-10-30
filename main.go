@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -27,7 +28,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.8.0"
+const versao = "1.9.0"
 
 var (
 	appDir  string
@@ -171,7 +172,7 @@ func main() {
 	static := http.FileServer(http.FS(sub))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
-		if p == "/" || p == "/ficha" || p == "/config" {
+		if p == "/" || p == "/ficha" || p == "/itr" || p == "/config" {
 			w.Header().Set("Cache-Control", "no-store")
 			http.ServeFileFS(w, r, sub, "index.html")
 			return
@@ -187,6 +188,7 @@ func main() {
 	mux.HandleFunc("/api/testar-supabase", apiTestarSupabase)
 	mux.HandleFunc("/api/empresas", apiEmpresas)
 	mux.HandleFunc("/api/log-cvm", apiLogCVM)
+	mux.HandleFunc("/api/itr", apiITR)
 	mux.HandleFunc("/api/ficha", apiFicha)
 	mux.HandleFunc("/api/testar-chave", apiTestarChave)
 	mux.HandleFunc("/api/limpar-cache", apiLimparCache)
@@ -472,6 +474,51 @@ func apiTestarSupabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "meta": m, "empresas": len(l)})
+}
+
+var reData = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+// /api/itr?t=VALE3 lista os ITRs com demonstrações completas; com &dt=2026-06-30 traz as contas
+func apiITR(w http.ResponseWriter, r *http.Request) {
+	if !usaSupa() {
+		jsonErr(w, 409, "as demonstrações de cada ITR só existem com a fonte Supabase")
+		return
+	}
+	t := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("t")))
+	dt := r.URL.Query().Get("dt")
+	if dt != "" && !reData.MatchString(dt) {
+		jsonErr(w, 400, "data inválida: use AAAA-MM-DD")
+		return
+	}
+	s := fonteSupa()
+	e, err := s.PorTicker(t)
+	if err != nil {
+		jsonErr(w, 502, err.Error())
+		return
+	}
+	if e == nil {
+		jsonErr(w, 404, "ticker não encontrado no banco do Supabase: "+t)
+		return
+	}
+	itrs, err := s.ITRs(e)
+	if err != nil {
+		jsonErr(w, 502, err.Error())
+		return
+	}
+	out := map[string]any{"ticker": t, "empresa": e.NomeCurto, "tickers": e.Tickers, "itrs": itrs}
+	if dt != "" {
+		dre, bp, dfc, base, err := s.ITR(e, dt)
+		if err != nil {
+			jsonErr(w, 502, err.Error())
+			return
+		}
+		if len(dre)+len(bp)+len(dfc) == 0 {
+			jsonErr(w, 404, "o banco não tem as demonstrações de "+t+" em "+dt)
+			return
+		}
+		out["dt"], out["base"], out["dre"], out["bp"], out["dfc"] = dt, base, dre, bp, dfc
+	}
+	writeJSON(w, out)
 }
 
 func apiLogCVM(w http.ResponseWriter, r *http.Request) {

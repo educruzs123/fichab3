@@ -544,3 +544,66 @@ func (s *Supa) LogCVM() ([]json.RawMessage, error) {
 	}
 	return l, err
 }
+
+// ContaITR: uma conta das demonstrações de um ITR (R$ milhões; contas 3.99 em R$ por ação)
+type ContaITR struct {
+	Cod   string   `json:"cod"`
+	Nome  string   `json:"nome"`
+	Valor *float64 `json:"valor"`
+	Ini   string   `json:"dt_ini,omitempty"` // início do período (DRE: trimestre ou acumulado; DFC: acumulado)
+}
+
+// Datas dos ITRs com as demonstrações completas no banco (o balanço tem a conta 1 em todos).
+func (s *Supa) ITRs(e *Empresa) ([]string, error) {
+	var l []struct {
+		Dt string `json:"dt_refer"`
+	}
+	q := url.Values{"select": {"dt_refer"}, "empresa_id": {"eq." + strconv.Itoa(e.ID)}, "cod_conta": {"eq.1"}, "order": {"dt_refer"}}
+	if _, err := s.get("bp_tri", q, -1, &l); err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(l))
+	for _, x := range l {
+		if len(out) == 0 || out[len(out)-1] != x.Dt {
+			out = append(out, x.Dt)
+		}
+	}
+	return out, nil
+}
+
+// DRE, balanço e DFC de um ITR, conta por conta, e a base (consolidado ou individual).
+func (s *Supa) ITR(e *Empresa, dt string) (dre, bp, dfc []ContaITR, base string, err error) {
+	type linha struct {
+		supaConta
+		Ini  string `json:"dt_ini"`
+		Base string `json:"base"`
+	}
+	ler := func(tab, sel string) ([]ContaITR, string, error) {
+		q := url.Values{"select": {sel + ",contas_nome(nome)"}, "empresa_id": {"eq." + strconv.Itoa(e.ID)}, "dt_refer": {"eq." + dt}, "order": {"cod_conta"}}
+		rows, err := supaTodos[linha](s, tab, q)
+		out := make([]ContaITR, 0, len(rows))
+		b := ""
+		for _, r := range rows {
+			c := ContaITR{Cod: r.Cod, Valor: r.Valor, Ini: r.Ini}
+			if r.Nome != nil {
+				c.Nome = r.Nome.Nome
+			}
+			out = append(out, c)
+			b = r.Base
+		}
+		return out, b, err
+	}
+	var wg sync.WaitGroup
+	var errs [3]error
+	wg.Add(3)
+	go func() { defer wg.Done(); dre, base, errs[0] = ler("dre_tri", "cod_conta,valor,dt_ini,base") }()
+	go func() { defer wg.Done(); bp, _, errs[1] = ler("bp_tri", "cod_conta,valor,base") }()
+	go func() { defer wg.Done(); dfc, _, errs[2] = ler("dfc_tri", "cod_conta,valor,dt_ini,base") }()
+	wg.Wait()
+	for _, x := range errs {
+		if x != nil {
+			return nil, nil, nil, "", x
+		}
+	}
+	return dre, bp, dfc, base, nil
+}

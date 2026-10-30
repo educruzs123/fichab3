@@ -1,4 +1,4 @@
-FichaB3Completa 1.8 — fichas de ações da B3 a partir da sua base local da CVM
+FichaB3Completa 1.9 — fichas de ações da B3 a partir da sua base local da CVM
 =====================================================================
 
 INSTALAR
