@@ -340,6 +340,9 @@
     const fv = v => ok(v) ? (emBi ? N1 : N0).format(v) : '';
     const fa = v => (emBi ? (Math.abs(v) < 10 ? N1 : N0) : N0).format(v);
 
+    // cotação diária, em destaque antes dos resultados
+    if (f.fonte === 'supabase') secaoDiaria(f);
+
     // receita
     const gR = h('div', { class: 'graf' });
     app.appendChild(card(h('h2', null, `${f.rotulo_receita}, ${cats[0] || ''}–${cats[cats.length - 1] || ''}`),
@@ -378,7 +381,6 @@
       tooltip: i => { const r = Apl[i]; return [['P/L', r.p_l != null && r.p_l < 0 ? 'prejuízo' : xv(r.p_l), C1], [r.parcial ? 'Cotação atual' : 'Preço no fim do ano', rs(r.preco)], ['Lucro por ação', rs(r.lpa)], ['P/VP', xv(r.p_vp)], ['Valor de mercado', r.valor_mercado_bi != null ? 'R$ ' + N1.format(r.valor_mercado_bi) + ' bi' : null]]; } });
 
     // cotação
-    if (f.fonte === 'supabase') secaoDiaria(f);
     if (temPreco) secaoCotacao(f);
 
     // proventos
@@ -466,6 +468,7 @@
     const g = h('div', { class: 'graf' }), info = h('p', { class: 'desc' }, 'Carregando…');
     const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Intervalo da cotação diária' });
     const c = card(h('div', { class: 'cab' }, h('h2', null, 'Cotação diária'), seg), info, g);
+    c.classList.add('destaque');
     app.appendChild(c);
     api('/api/cotacoes-diarias?t=' + encodeURIComponent(f.ticker)).then(l => {
       if (l.length < 2) { c.remove(); return; }
