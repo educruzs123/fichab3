@@ -1,14 +1,15 @@
 :root {
-  --bg: #F5F6F8; --card: #FFFFFF; --tx: #15181E; --mu: #5D6575; --ln: #E3E6EC; --ln2: #EEF0F4;
-  --a: #1F4FD1; --a2: #8FA8EE; --a3: #DCE5FB; --b: #E0752D; --c: #0E9384; --ok: #17803D; --bad: #C2362F;
-  --grade: #ECEEF2; --eixo: #9AA1AE; --sombra: 0 1px 2px rgba(16,24,40,.05), 0 4px 14px rgba(16,24,40,.05);
+  /* tema grafite: neutros frios, azul-marinho como destaque */
+  --bg: #F3F4F6; --card: #FFFFFF; --tx: #111827; --mu: #4B5563; --ln: #E5E7EB; --ln2: #F0F1F4;
+  --a: #1E3A5F; --a2: #64748B; --a3: #E3E8EF; --a-tx: #FFFFFF; --b: #E0752D; --c: #0E9384; --ok: #17803D; --bad: #C2362F;
+  --grade: #ECEEF1; --eixo: #9CA3AF; --sombra: 0 1px 2px rgba(16,24,40,.05), 0 4px 14px rgba(16,24,40,.05);
   /* séries dos gráficos: no máximo 3 por gráfico (paleta validada para daltonismo nos dois modos) */
   --s1: #1F4FD1; --s2: #E0752D; --s3: #0E9384;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #111318; --card: #1A1D24; --tx: #E8EBF1; --mu: #9AA2B3; --ln: #2B303A; --ln2: #232731;
-    --a: #6F92F2; --a2: #3D528F; --a3: #222C47; --b: #F0965A; --c: #3CC0AF; --ok: #4CC38A; --bad: #EF6B63;
-    --grade: #262A33; --eixo: #6B7280; --sombra: none;
+  :root { --bg: #0F1115; --card: #181B21; --tx: #E5E7EB; --mu: #9CA3AF; --ln: #2A2E36; --ln2: #22262D;
+    --a: #8FB3E0; --a2: #7489A8; --a3: #232B38; --a-tx: #0F1115; --b: #F0965A; --c: #3CC0AF; --ok: #4CC38A; --bad: #EF6B63;
+    --grade: #262A31; --eixo: #6B7280; --sombra: none;
     --s1: #4F7FEE; --s2: #D0702F; --s3: #1E9E8E; }
 }
 * { box-sizing: border-box; }
@@ -60,10 +61,10 @@ h3 { font-size: 15px; margin: 18px 0 6px; }
 .seg { display: inline-flex; border: 1px solid var(--ln); border-radius: 999px; overflow: hidden; }
 .seg button { font: inherit; font-size: 12.5px; padding: 4px 13px; border: 0; background: transparent; color: var(--mu); cursor: pointer; }
 .seg button + button { border-left: 1px solid var(--ln); }
-.seg button[aria-pressed="true"] { background: var(--a); color: #fff; }
+.seg button[aria-pressed="true"] { background: var(--a); color: var(--a-tx); }
 .btn { font: inherit; font-size: 13.5px; font-weight: 550; padding: 7px 14px; border-radius: 9px; border: 1px solid var(--ln); background: var(--card); color: var(--tx); cursor: pointer; }
 .btn:hover { border-color: var(--a2); }
-.btn.pri { background: var(--a); border-color: var(--a); color: #fff; }
+.btn.pri { background: var(--a); border-color: var(--a); color: var(--a-tx); }
 .btn.pri:hover { filter: brightness(1.08); }
 .btn.perigo { color: var(--bad); }
 .btn:disabled { opacity: .55; cursor: default; }

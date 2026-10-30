@@ -27,7 +27,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.6.0"
+const versao = "1.7.0"
 
 var (
 	appDir  string
