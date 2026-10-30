@@ -390,18 +390,25 @@
       colsT.push(['Lucro ctrl.', t => miN(t.lucro_ctrl)], ['Var. a/a', t => pctS(t.var_lucro)], ['Mg. líq.', t => pct(t.margem_liq)], ['ROE 12m', t => pct(t.roe_12m)], ['PL', t => miN(t.pl)]);
       if (!fin) colsT.push(['Dív. líq.', t => miN(t.div_liq)], ['DL/EBITDA 12m', t => xv(t.div_ebitda_12m)], ['FCO', t => miN(t.fco)]);
       const gT = h('div', { class: 'graf' }), gTM = h('div', { class: 'graf' });
-      const linksITR = h('p', { class: 'acoes', style: 'margin:0 0 12px' });
-      if (f.fonte === 'supabase') api('/api/itr?t=' + encodeURIComponent(f.ticker)).then(r => {
-        if (!r.itrs.length) return;
-        linksITR.append(h('span', { class: 'status', style: 'align-self:center' }, 'Demonstrações completas de cada ITR:'), ...r.itrs.slice().reverse().map(dt => h('a', { class: 'chip', href: '/itr?t=' + encodeURIComponent(f.ticker) + '&dt=' + dt }, triRot(dt))));
-      }).catch(() => {});
       app.appendChild(card(h('h2', null, 'Últimos trimestres'), h('p', { class: 'desc' }, 'Resultados de cada trimestre (ITR/DFP da CVM). À esquerda, ' + f.rotulo_receita.toLowerCase() + ' (' + un + '); à direita, margem líquida.'),
-        linksITR, h('div', { class: 'grade2' }, gT, gTM),
+        h('div', { class: 'grade2' }, gT, gTM),
         h('div', { class: 'tabela-wrap', style: 'margin-top:12px' }, h('table', { class: 't' }, h('thead', null, h('tr', null, colsT.map((c, i) => h('th', { class: i ? 'n' : '' }, c[0])))),
           h('tbody', null, T.slice().reverse().map(t => h('tr', null, colsT.map((c, i) => h('td', { class: i ? 'n' : '' }, c[1](t))))))))));
       const tipT = i => [[f.rotulo_receita, mi(T[i].receita), C1], ['Var. a/a', pctS(T[i].var_receita)], ['Lucro dos controladores', mi(T[i].lucro_ctrl)], ['Margem líquida', pct(T[i].margem_liq), C2]];
       G.categorias(gT, { cats: T.map(t => t.tri), series: [{ nome: f.rotulo_receita, cor: C1, vals: T.map(t => ok(t.receita) ? t.receita / div : null) }], fmtEsq: fa, altura: 240, legenda: false, tooltip: tipT });
       G.categorias(gTM, { cats: T.map(t => t.tri), series: [{ nome: 'Margem líquida', tipo: 'linha', cor: C2, vals: T.map(t => t.margem_liq) }], fmtEsq: v => N0.format(v * 100) + '%', zero: false, altura: 240, legenda: false, tooltip: tipT });
+    }
+
+    // links para as demonstrações de cada ITR (o card some se o banco não tiver nenhum)
+    if (f.fonte === 'supabase') {
+      const linksITR = h('p', { class: 'acoes', style: 'margin:0' });
+      const cITR = card(h('h2', null, 'Demonstrações completas de cada ITR'), h('p', { class: 'desc' }, 'DRE, balanço e fluxo de caixa de cada trimestre, conta por conta, como estão no banco (desde o 1T25).'), linksITR);
+      cITR.classList.add('noprint');
+      app.appendChild(cITR);
+      api('/api/itr?t=' + encodeURIComponent(f.ticker)).then(r => {
+        if (!r.itrs.length) { cITR.remove(); return; }
+        linksITR.append(...r.itrs.slice().reverse().map(dt => h('a', { class: 'chip', href: '/itr?t=' + encodeURIComponent(f.ticker) + '&dt=' + dt }, 'ITR ' + triRot(dt))));
+      }).catch(() => cITR.remove());
     }
 
     // notas
