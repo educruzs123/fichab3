@@ -308,7 +308,9 @@
     const tile = (k, v, d, c) => h('div', { class: 'tile' }, h('div', { class: 'k' }, k), h('div', { class: 'v ' + (c || '') }, v), h('div', { class: 'd' }, d || ''));
     const t1 = h('div', { class: 'tiles' });
     t1.append(
-      tile('Cotação', rs(at.cotacao), at.var_12m != null ? h('span', null, h('b', { class: cls(at.var_12m) }, pctS(at.var_12m)), ' em 12 meses') : (at.cotacao_data ? dataBR(at.cotacao_data) : 'sem cotação')),
+      tile('Cotação', rs(at.cotacao), h('span', null,
+        at.var_dia != null ? [h('b', { class: at.var_dia > 0 ? 'up' : at.var_dia < 0 ? 'down' : '', title: 'Fechamento anterior: ' + rs(at.cotacao_anterior) }, pctS(at.var_dia)), ' no dia', at.var_12m != null ? ' · ' : ''] : null,
+        at.var_12m != null ? [h('b', { class: cls(at.var_12m) }, pctS(at.var_12m)), ' em 12 meses'] : at.var_dia != null ? null : (at.cotacao_data ? dataBR(at.cotacao_data) : 'sem cotação'))),
       tile('P/L (12 meses)', xv(at.p_l), f.pl_media != null ? h('span', null, 'média ', h('b', null, xv(f.pl_media))) : ''),
       tile('P/VP', xv(at.p_vp), 'sobre o PL do ' + (f.ult_tri || 'último balanço')),
       tile('Dividend yield 12m', pct(at.dy_12m), at.proventos_12m_acao != null ? h('span', null, h('b', null, rs(at.proventos_12m_acao)), ' por ação') : ''),

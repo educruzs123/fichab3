@@ -28,7 +28,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.15.0"
+const versao = "1.15.1"
 
 var (
 	appDir  string
@@ -743,6 +743,10 @@ func apiFicha(w http.ResponseWriter, r *http.Request) {
 	f := MontarFicha(e, d, t, serie)
 	if ult != nil && f.Atual["cotacao_data"] == ult.Data {
 		f.Atual["cotacao_hora"] = ult.Hora
+		if ult.Anterior > 0 {
+			f.Atual["var_dia"] = ult.Preco/ult.Anterior - 1
+			f.Atual["cotacao_anterior"] = ult.Anterior
+		}
 		f.FonteCot += "; última cotação: Yahoo Finance"
 	}
 	if usaSupa() {
