@@ -28,7 +28,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.13.4"
+const versao = "1.14.0"
 
 var (
 	appDir  string
@@ -190,6 +190,8 @@ func main() {
 	mux.HandleFunc("/api/log-cvm", apiLogCVM)
 	mux.HandleFunc("/api/log-cotacoes", apiLogCotacoes)
 	mux.HandleFunc("/api/cotacoes-diarias", apiCotacoesDiarias)
+	mux.HandleFunc("/api/demonstrativos", apiDemonstrativos)
+	mux.HandleFunc("/demonstrativos/", servirDemonstrativo)
 	mux.HandleFunc("/api/itr", apiITR)
 	mux.HandleFunc("/api/ficha", apiFicha)
 	mux.HandleFunc("/api/testar-chave", apiTestarChave)
@@ -521,6 +523,37 @@ func apiITR(w http.ResponseWriter, r *http.Request) {
 		out["dt"], out["base"], out["dre"], out["bp"], out["dfc"] = dt, base, dre, bp, dfc
 	}
 	writeJSON(w, out)
+}
+
+var (
+	reTickerPasta = regexp.MustCompile(`^[A-Z0-9]{4,6}$`)
+	reArquivoPDF  = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.pdf$`)
+)
+
+// /api/demonstrativos?t=TIMS3 lista os PDFs de ~/FichaB3/demonstrativos/TIMS3
+func apiDemonstrativos(w http.ResponseWriter, r *http.Request) {
+	t := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("t")))
+	out := []map[string]any{}
+	if reTickerPasta.MatchString(t) {
+		itens, _ := os.ReadDir(filepath.Join(appDir, "demonstrativos", t))
+		for _, it := range itens {
+			if info, err := it.Info(); err == nil && info.Mode().IsRegular() && reArquivoPDF.MatchString(it.Name()) {
+				out = append(out, map[string]any{"nome": it.Name(), "tamanho": info.Size()})
+			}
+		}
+	}
+	writeJSON(w, out)
+}
+
+// entrega só PDFs diretamente dentro da pasta do ticker; nome e ticker validados contra as listas acima
+func servirDemonstrativo(w http.ResponseWriter, r *http.Request) {
+	partes := strings.Split(strings.TrimPrefix(r.URL.Path, "/demonstrativos/"), "/")
+	if len(partes) != 2 || !reTickerPasta.MatchString(partes[0]) || !reArquivoPDF.MatchString(partes[1]) {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/pdf")
+	http.ServeFile(w, r, filepath.Join(appDir, "demonstrativos", partes[0], partes[1]))
 }
 
 func apiCotacoesDiarias(w http.ResponseWriter, r *http.Request) {

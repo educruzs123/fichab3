@@ -443,6 +443,18 @@
       G.categorias(gTM, { cats: T.map(t => t.tri), series: [{ nome: 'Margem líquida', tipo: 'linha', cor: C2, vals: T.map(t => t.margem_liq) }], fmtEsq: v => N0.format(v * 100) + '%', zero: false, altura: 240, legenda: false, tooltip: tipT });
     }
 
+    // PDFs baixados para ~/FichaB3/demonstrativos/<TICKER> (o card some se a pasta não tiver nenhum)
+    const linksDem = h('p', { class: 'acoes', style: 'margin:0' });
+    const cDem = card(h('h2', null, 'Demonstrativos em PDF'), h('p', { class: 'desc' }, 'Arquivos salvos na pasta do projeto, como publicados pela empresa. Abrem em uma nova aba.'), linksDem);
+    cDem.classList.add('noprint');
+    app.appendChild(cDem);
+    api('/api/demonstrativos?t=' + encodeURIComponent(f.ticker)).then(l => {
+      if (!l.length) { cDem.remove(); return; }
+      // TIM_DF_2T26.pdf → 2T26, do mais recente para o mais antigo
+      const per = a => { const m = /([1-4])T(\d\d)/.exec(a.nome); return m ? { rot: m[1] + 'T' + m[2], ord: +m[2] * 10 + +m[1] } : { rot: a.nome.replace(/\.pdf$/, ''), ord: 0 }; };
+      linksDem.append(...l.map(a => ({ ...a, ...per(a) })).sort((a, b) => b.ord - a.ord).map(a => h('a', { class: 'chip', href: '/demonstrativos/' + encodeURIComponent(f.ticker) + '/' + encodeURIComponent(a.nome), target: '_blank', rel: 'noopener', title: a.nome + ' · ' + N1.format(a.tamanho / 1e6) + ' MB' }, 'PDF ' + a.rot)));
+    }).catch(() => cDem.remove());
+
     // links para as demonstrações de cada ITR (o card some se o banco não tiver nenhum)
     if (f.fonte === 'supabase') {
       const linksITR = h('p', { class: 'acoes', style: 'margin:0' });
