@@ -285,7 +285,7 @@
     app.appendChild(h('p', { class: 'kicker' }, [f.setor, f.tipo, f.ativa ? null : 'cancelada na CVM'].filter(Boolean).join(' · ')));
     app.appendChild(h('h1', null, (f.nome_curto || f.empresa) + ' · ' + f.ticker));
     app.appendChild(h('p', { class: 'sub' }, h('span', { class: 'chips' }, f.tickers.map(x => h('a', { class: x === f.ticker ? 'chip' : 'chip cinza', href: '/ficha?t=' + x }, x))), '  ',
-      `${f.empresa} · CNPJ ${f.cnpj} · DFP até ${f.ult_dfp} · trimestres até ${f.ult_tri || '—'}` + (at.cotacao_data ? ` · cotação de ${dataBR(at.cotacao_data)}` : '')));
+      `${f.empresa} · CNPJ ${f.cnpj} · DFP até ${f.ult_dfp} · trimestres até ${f.ult_tri || '—'}` + (at.cotacao_data ? ` · cotação de ${dataBR(at.cotacao_data)}` + (at.cotacao_hora ? ` às ${at.cotacao_hora} (Yahoo Finance)` : '') : '')));
     const barra = h('div', { class: 'acoes noprint', style: 'margin:-6px 0 18px' },
       h('button', { class: 'btn', onclick: () => paginaFicha(f.ticker, true) }, 'Atualizar cotação'),
       h('button', { class: 'btn', onclick: () => baixarCSV(f) }, 'Baixar tabela (CSV)'),

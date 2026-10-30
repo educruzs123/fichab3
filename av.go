@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -151,4 +152,85 @@ func TestarChave(chave string) (float64, string, error) {
 	}
 	p, _ := strconv.ParseFloat(fmt.Sprint(q["05. price"]), 64)
 	return p, fmt.Sprint(q["07. latest trading day"]), nil
+}
+
+// Última cotação no Yahoo Finance (a mesma fonte do yfinance), guardada por 5 minutos.
+type UltimaCot struct {
+	Preco float64
+	Data  string // AAAA-MM-DD do pregão, no horário da bolsa
+	Hora  string // HH:MM
+	em    time.Time
+}
+
+var (
+	ultCotMu sync.Mutex
+	ultCot   = map[string]*UltimaCot{}
+)
+
+// nil se o Yahoo não responder ou não conhecer o ticker: a ficha segue com os dados do banco.
+func UltimaCotacao(ticker string, forcar bool) *UltimaCot {
+	ultCotMu.Lock()
+	c, ok := ultCot[ticker]
+	ultCotMu.Unlock()
+	if ok && !forcar && time.Since(c.em) < 5*time.Minute {
+		if c.Preco <= 0 {
+			return nil
+		}
+		return c
+	}
+	n := &UltimaCot{em: time.Now()}
+	req, _ := http.NewRequest("GET", "https://query1.finance.yahoo.com/v8/finance/chart/"+url.PathEscape(ticker)+".SA?range=1d&interval=1d", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	cli := &http.Client{Timeout: 5 * time.Second}
+	if resp, err := cli.Do(req); err == nil {
+		defer resp.Body.Close()
+		var j struct {
+			Chart struct {
+				Result []struct {
+					Meta struct {
+						Preco  float64 `json:"regularMarketPrice"`
+						Tempo  int64   `json:"regularMarketTime"`
+						Offset int     `json:"gmtoffset"`
+					} `json:"meta"`
+				} `json:"result"`
+			} `json:"chart"`
+		}
+		if resp.StatusCode == 200 && json.NewDecoder(resp.Body).Decode(&j) == nil && len(j.Chart.Result) > 0 {
+			m := j.Chart.Result[0].Meta
+			if m.Preco > 0 && m.Tempo > 0 {
+				t := time.Unix(m.Tempo, 0).In(time.FixedZone("B3", m.Offset))
+				n.Preco, n.Data, n.Hora = m.Preco, t.Format("2006-01-02"), t.Format("15:04")
+			}
+		}
+	}
+	ultCotMu.Lock()
+	ultCot[ticker] = n
+	ultCotMu.Unlock()
+	if n.Preco <= 0 {
+		return nil
+	}
+	return n
+}
+
+// Série com a última cotação no fim: troca o mês corrente ou abre um mês novo. Copia os
+// pontos porque a série pode estar em cache. O ajustado acompanha o preço, para não
+// parecer provento na conta de rendimento.
+func comUltimaCotacao(s *Serie, u *UltimaCot) *Serie {
+	if s == nil || u == nil || len(s.Pontos) == 0 {
+		return s
+	}
+	ult := s.Pontos[len(s.Pontos)-1]
+	if u.Data <= ult.Data || ult.Close <= 0 {
+		return s
+	}
+	c := *s
+	c.Pontos = append([]Ponto(nil), s.Pontos...)
+	n := Ponto{Data: u.Data, Close: u.Preco, Adj: ult.Adj * u.Preco / ult.Close}
+	if u.Data[:7] == ult.Data[:7] {
+		n.Div = ult.Div
+		c.Pontos[len(c.Pontos)-1] = n
+	} else {
+		c.Pontos = append(c.Pontos, n)
+	}
+	return &c
 }

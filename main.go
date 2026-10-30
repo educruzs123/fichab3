@@ -28,7 +28,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.14.1"
+const versao = "1.15.0"
 
 var (
 	appDir  string
@@ -561,10 +561,22 @@ func apiCotacoesDiarias(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 409, "as cotações diárias só existem com a fonte Supabase")
 		return
 	}
-	l, err := fonteSupa().CotacoesDiarias(strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("t"))))
+	t := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("t")))
+	l, err := fonteSupa().CotacoesDiarias(t)
 	if err != nil {
 		jsonErr(w, 502, err.Error())
 		return
+	}
+	// último pregão do Yahoo, se o banco ainda não o tiver
+	if u := UltimaCotacao(t, false); u != nil && len(l) > 0 {
+		var ult struct {
+			Data string `json:"data"`
+		}
+		if json.Unmarshal(l[len(l)-1], &ult) == nil && u.Data > ult.Data {
+			if b, err := json.Marshal(map[string]any{"data": u.Data, "fechamento": u.Preco}); err == nil {
+				l = append(l, b)
+			}
+		}
 	}
 	writeJSON(w, l)
 }
@@ -726,7 +738,13 @@ func apiFicha(w http.ResponseWriter, r *http.Request) {
 	if serie == nil {
 		serie, avErr = ObterCotacoes(t, chave, filepath.Join(appDir, "cache"), forcar)
 	}
+	ult := UltimaCotacao(t, forcar)
+	serie = comUltimaCotacao(serie, ult)
 	f := MontarFicha(e, d, t, serie)
+	if ult != nil && f.Atual["cotacao_data"] == ult.Data {
+		f.Atual["cotacao_hora"] = ult.Hora
+		f.FonteCot += "; última cotação: Yahoo Finance"
+	}
 	if usaSupa() {
 		f.Fonte = "supabase"
 	} else {
