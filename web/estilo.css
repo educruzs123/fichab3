@@ -142,6 +142,6 @@ table.itr td.n3 { padding-left: 22px; } table.itr td.n4 { padding-left: 34px; co
 table.itr tr.forte td { font-weight: 600; }
 /* card em destaque: fundo cinza-escuro nos dois modos; só na tela, porque a impressão não leva fundos */
 @media screen {
-  .card.destaque { --card: #2A2F38; --tx: #F3F4F6; --mu: #B4BBC6; --ln: #414854; --ln2: #343A44; --a: #A9C6EC; --a-tx: #0F1115; --a3: #39455A;
-    --grade: #3A414C; --eixo: #808998; --ok: #5AD19A; --bad: #F58A83; --s1: #7BA0F5; background: var(--card); color: var(--tx); border-color: var(--ln); box-shadow: none; }
+  .card.destaque { --card: #3A404B; --tx: #F3F4F6; --mu: #C6CCD6; --ln: #525A67; --ln2: #454C58; --a: #B9D2F2; --a-tx: #0F1115; --a3: #4A566C;
+    --grade: #4B525E; --eixo: #929AA8; --ok: #74E0AE; --bad: #FDA8A2; --s1: #93B3F9; background: var(--card); color: var(--tx); border-color: var(--ln); box-shadow: none; }
 }
