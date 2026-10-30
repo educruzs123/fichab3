@@ -133,6 +133,8 @@
     const corpo = h('tbody');
     const cont = h('p', { class: 'status' });
     app.appendChild(h('div', { class: 'tabela-wrap', style: 'max-height:none' }, h('table', { class: 't lista' }, h('thead', null, cab), corpo)));
+    const so = h('label', { class: 'status', style: 'display:flex;gap:6px;align-items:center;margin:10px 0 2px' }, h('input', { type: 'checkbox', checked: true }), 'Só companhias ativas na CVM');
+    app.appendChild(so);
     app.appendChild(cont);
     app.appendChild(h('p', { class: 'desc' }, 'Números dos 12 meses até o último trimestre informado à CVM; cotação, P/L e DY pelas cotações mensais do Supabase (P/L sobre o lucro dos controladores). Clique no título de uma coluna para ordenar.'));
     if (st.fonte === 'supabase') logCVM();
@@ -146,8 +148,8 @@
           c[0], ordem.i === i ? (ordem.dir > 0 ? ' ▲' : ' ▼') : ''))));
     }
     function desenhar() {
-      const q = norm(q0.trim());
-      const lista = es.filter(e => e.ativa && (!q || norm(e.tickers.join(' ') + ' ' + e.nome + ' ' + e.setor).includes(q)));
+      const q = norm(q0.trim()), soAt = so.querySelector('input').checked;
+      const lista = es.filter(e => (!soAt || e.ativa) && (!q || norm(e.tickers.join(' ') + ' ' + e.nome + ' ' + e.setor).includes(q)));
       const chave = cols[ordem.i][1];
       // vazios sempre no fim, nos dois sentidos
       lista.sort((a, b) => { const x = chave(a), y = chave(b), vx = x == null || x === '', vy = y == null || y === ''; if (vx || vy) return vx - vy; return (typeof x === 'string' ? x.localeCompare(y, 'pt-BR') : x - y) * ordem.dir; });
@@ -159,14 +161,15 @@
       if (q) cont.append(` para “${q0.trim()}” · `, h('a', { href: '/' }, 'ver todas'));
     }
     cabecalho();
+    so.querySelector('input').addEventListener('change', desenhar);
     desenhar();
   }
 
-  // log das entregas das empresas à CVM (RAD) inseridas no banco, recolhível no fim da página
+  // log das entregas das empresas à CVM (RAD) inseridas no banco, no fim da página
   function logCVM() {
-    const resumo = h('span', { class: 'status' }, 'carregando…');
+    const resumo = h('p', { class: 'status', style: 'margin:0 0 6px' }, 'Carregando…');
     const corpo = h('div');
-    app.appendChild(h('details', { class: 'card log' }, h('summary', null, h('b', null, 'Inserções da CVM por empresa'), ' ', resumo), corpo));
+    app.appendChild(card(h('h2', null, 'Inserções da CVM por empresa'), resumo, corpo));
     // ITR de 30/09/2026 → 3T26; DFP → 2025
     const periodo = l => l.tipo === 'ITR' && l.dt_refer ? Math.ceil(+l.dt_refer.slice(5, 7) / 3) + 'T' + l.dt_refer.slice(2, 4) : (l.dt_refer || '').slice(0, 4);
     const quando = s => s ? new Date(s).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
@@ -175,7 +178,7 @@
       if (!l.length) { resumo.textContent = 'nenhuma inserção registrada'; return; }
       const u = l[0];
       resumo.textContent = `${l.length} documentos · último: ${u.ticker || u.empresa} ${u.tipo} ${periodo(u)}, inserido em ${quando(u.inserido_em)}`;
-      corpo.appendChild(h('p', { class: 'desc', style: 'margin-top:10px' }, 'Documentos que as empresas entregaram à CVM (sistema RAD) e que a carga automática inseriu no banco fichas-b3, do mais recente para o mais antigo.'));
+      corpo.appendChild(h('p', { class: 'desc' }, 'Documentos que as empresas entregaram à CVM (sistema RAD) e que a carga automática inseriu no banco fichas-b3, do mais recente para o mais antigo.'));
       corpo.appendChild(h('div', { class: 'tabela-wrap', style: 'max-height:360px' }, h('table', { class: 't' },
         h('thead', null, h('tr', null, ['Inserido em', 'Empresa', 'Documento', 'Entregue à CVM', 'Linhas', 'Situação'].map((c, i) => h('th', { class: i === 4 ? 'n' : '' }, c)))),
         h('tbody', null, l.map(x => h('tr', null,
