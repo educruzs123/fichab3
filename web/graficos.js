@@ -151,12 +151,13 @@
       tk.forEach(v => { s('line', { x1: ml, x2: W - mr, y1: Y(v), y2: Y(v), stroke: v === 0 ? 'var(--eixo)' : 'var(--grade)' }, g); txt(g, ml - 6, Y(v) + 4, fmt(v), { 'text-anchor': 'end' }); });
       if (o.ref != null) s('line', { x1: ml, x2: W - mr, y1: Y(o.ref), y2: Y(o.ref), stroke: 'var(--eixo)', 'stroke-dasharray': '5,4' }, g);
       // eixo x
-      const curto = (t1 - t0) < 1000 * 86400 * 800;
+      const dias = (t1 - t0) / 86400000, semanal = dias < 100, mensal = dias < 400, curto = dias < 800;
       const ticks = [];
       const d0 = new Date(pts[0].d);
-      if (curto) { for (let d = new Date(d0.getFullYear(), d0.getMonth() + 1, 1); d.getTime() <= t1; d.setMonth(d.getMonth() + 1)) if (d.getMonth() % 3 === 0) ticks.push(new Date(d)); }
+      if (semanal) { for (let d = new Date(d0); d.getTime() <= t1; d.setDate(d.getDate() + 7)) ticks.push(new Date(d)); }
+      else if (curto) { for (let d = new Date(d0.getFullYear(), d0.getMonth() + 1, 1); d.getTime() <= t1; d.setMonth(d.getMonth() + 1)) if (mensal || d.getMonth() % 3 === 0) ticks.push(new Date(d)); }
       else { for (let a = d0.getFullYear() + 1; a <= new Date(t1).getFullYear(); a++) ticks.push(new Date(a, 0, 1)); }
-      const lbl = d => curto ? MES[d.getMonth()] + '/' + String(d.getFullYear()).slice(2) : String(d.getFullYear());
+      const lbl = d => semanal ? String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') : curto ? MES[d.getMonth()] + '/' + String(d.getFullYear()).slice(2) : String(d.getFullYear());
       const lw = medir(svg, curto ? 'out/26' : '2026') + 10, every = Math.max(1, Math.ceil(lw / ((W - ml - mr) / Math.max(1, ticks.length))));
       ticks.forEach((d, i) => { if ((ticks.length - 1 - i) % every === 0) txt(g, X(d.getTime()), H - mb + 17, lbl(d), { 'text-anchor': 'middle' }); });
       o.series.forEach((x, si) => {
@@ -181,7 +182,7 @@
         const p = pts[bi], xx = X(p.d.getTime());
         rule.setAttribute('x1', xx); rule.setAttribute('x2', xx); rule.removeAttribute('display');
         o.series.forEach((x, si) => { const v = p[x.key]; if (v == null) { dots[si].setAttribute('display', 'none'); return; } dots[si].setAttribute('cx', xx); dots[si].setAttribute('cy', Y(v)); dots[si].removeAttribute('display'); });
-        mostrarTip(ev, MES[p.d.getMonth()] + '/' + p.d.getFullYear(), o.tooltip ? o.tooltip(p, bi) : o.series.map(x => [x.nome, fmt(p[x.key]), x.cor]));
+        mostrarTip(ev, o.titulo ? o.titulo(p) : MES[p.d.getMonth()] + '/' + p.d.getFullYear(), o.tooltip ? o.tooltip(p, bi) : o.series.map(x => [x.nome, fmt(p[x.key]), x.cor]));
       });
       cap.addEventListener('mouseleave', () => { rule.setAttribute('display', 'none'); dots.forEach(d => d.setAttribute('display', 'none')); esconderTip(); });
     };

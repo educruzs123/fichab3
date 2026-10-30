@@ -616,3 +616,9 @@ func (s *Supa) ITR(e *Empresa, dt string) (dre, bp, dfc []ContaITR, base string,
 	}
 	return dre, bp, dfc, base, nil
 }
+
+// Fechamentos diários dos últimos 5 anos (já ajustados por desdobramentos); o histórico longo fica na série mensal.
+func (s *Supa) CotacoesDiarias(ticker string) ([]json.RawMessage, error) {
+	q := url.Values{"select": {"data,fechamento"}, "ticker": {"eq." + ticker}, "data": {"gte." + time.Now().AddDate(-5, 0, 0).Format("2006-01-02")}, "order": {"data"}}
+	return supaTodos[json.RawMessage](s, "cotacoes", q)
+}

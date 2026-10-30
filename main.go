@@ -28,7 +28,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.12.0"
+const versao = "1.13.0"
 
 var (
 	appDir  string
@@ -189,6 +189,7 @@ func main() {
 	mux.HandleFunc("/api/empresas", apiEmpresas)
 	mux.HandleFunc("/api/log-cvm", apiLogCVM)
 	mux.HandleFunc("/api/log-cotacoes", apiLogCotacoes)
+	mux.HandleFunc("/api/cotacoes-diarias", apiCotacoesDiarias)
 	mux.HandleFunc("/api/itr", apiITR)
 	mux.HandleFunc("/api/ficha", apiFicha)
 	mux.HandleFunc("/api/testar-chave", apiTestarChave)
@@ -520,6 +521,19 @@ func apiITR(w http.ResponseWriter, r *http.Request) {
 		out["dt"], out["base"], out["dre"], out["bp"], out["dfc"] = dt, base, dre, bp, dfc
 	}
 	writeJSON(w, out)
+}
+
+func apiCotacoesDiarias(w http.ResponseWriter, r *http.Request) {
+	if !usaSupa() {
+		jsonErr(w, 409, "as cotações diárias só existem com a fonte Supabase")
+		return
+	}
+	l, err := fonteSupa().CotacoesDiarias(strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("t"))))
+	if err != nil {
+		jsonErr(w, 502, err.Error())
+		return
+	}
+	writeJSON(w, l)
 }
 
 func apiLogCotacoes(w http.ResponseWriter, r *http.Request) {

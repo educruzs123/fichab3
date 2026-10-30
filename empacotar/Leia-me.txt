@@ -1,4 +1,4 @@
-FichaB3Completa 1.12 — fichas de ações da B3 a partir da sua base local da CVM
+FichaB3Completa 1.13 — fichas de ações da B3 a partir da sua base local da CVM
 =====================================================================
 
 INSTALAR
@@ -34,7 +34,7 @@ Digite um ticker na busca (ex.: BBDC4, VALE3, LEVE3) ou escolha na lista.
 A lista mostra cotação, P/L, DY, margem, ROE, receita, lucro e dívida;
 clique no título de uma coluna para ordenar.
 Cada ficha tem receita, lucro e margens, ROE, ROA, P/L, EV/EBITDA,
-fluxo de caixa livre, crescimento médio (CAGR), cotação (1 a 10 anos),
+fluxo de caixa livre, crescimento médio (CAGR), cotação diária e mensal,
 retorno com proventos reinvestidos, proventos e yield, endividamento,
 geração de caixa e as tabelas anual e trimestral. Dá para baixar a tabela
 em CSV ou imprimir/salvar em PDF.

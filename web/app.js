@@ -378,6 +378,7 @@
       tooltip: i => { const r = Apl[i]; return [['P/L', r.p_l != null && r.p_l < 0 ? 'prejuízo' : xv(r.p_l), C1], [r.parcial ? 'Cotação atual' : 'Preço no fim do ano', rs(r.preco)], ['Lucro por ação', rs(r.lpa)], ['P/VP', xv(r.p_vp)], ['Valor de mercado', r.valor_mercado_bi != null ? 'R$ ' + N1.format(r.valor_mercado_bi) + ' bi' : null]]; } });
 
     // cotação
+    if (f.fonte === 'supabase') secaoDiaria(f);
     if (temPreco) secaoCotacao(f);
 
     // proventos
@@ -458,6 +459,35 @@
     if (f.fonte_cotacao) notas.push('Cotações: ' + f.fonte_cotacao + '. Preço sem ajuste por proventos, ajustado por desdobramentos; “com proventos reinvestidos” usa o fechamento ajustado.');
     notas.push(f.contas.acoes === 'capital' ? 'Ações em circulação: composição do capital (total menos tesouraria) informada nos DFP/ITR da CVM; valor de mercado = ações × cotação do ticker escolhido; P/L = valor de mercado ÷ lucro dos controladores.' : 'Ações em circulação estimadas como lucro dos controladores ÷ lucro por ação da classe ' + (f.classe === 'UNIT' ? 'ON' : f.classe) + ' (sem os zips da CVM); P/L, valor de mercado e yield dependem dessa estimativa.');
     app.appendChild(h('div', { class: 'rodape' }, h('b', null, 'Notas e fontes'), h('ul', null, notas.map(n => h('li', null, n))), h('p', null, 'Ficha gerada em ' + f.gerado_em + ' pelo FichaB3Completa.')));
+  }
+
+  // card some se o banco não tiver cotações diárias do ticker
+  function secaoDiaria(f) {
+    const g = h('div', { class: 'graf' }), info = h('p', { class: 'desc' }, 'Carregando…');
+    const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Intervalo da cotação diária' });
+    const c = card(h('div', { class: 'cab' }, h('h2', null, 'Cotação diária'), seg), info, g);
+    app.appendChild(c);
+    api('/api/cotacoes-diarias?t=' + encodeURIComponent(f.ticker)).then(l => {
+      if (l.length < 2) { c.remove(); return; }
+      const pts = l.map(x => ({ d: new Date(x.data + 'T12:00:00'), iso: x.data, v: +x.fechamento }));
+      const ultimo = pts[pts.length - 1];
+      const opts = [['1m', '1 mês', 1], ['3m', '3 meses', 3], ['6m', '6 meses', 6], ['1a', '1 ano', 12], ['2a', '2 anos', 24], ['5a', '5 anos', 60]];
+      let per = store.get('cot_dia_periodo', '1a');
+      const btns = opts.map(([k, r]) => h('button', { type: 'button', onclick: () => { per = k; store.set('cot_dia_periodo', k); desenhar(); } }, r));
+      seg.append(...btns);
+      function desenhar() {
+        btns.forEach((b, i) => b.setAttribute('aria-pressed', String(opts[i][0] === per)));
+        const lim = new Date(ultimo.d); lim.setMonth(lim.getMonth() - (opts.find(o => o[0] === per) || opts[3])[2]);
+        let s = pts.filter(p => p.d >= lim);
+        if (s.length < 2) s = pts;
+        const vr = ultimo.v / s[0].v - 1, vals = s.map(p => p.v);
+        info.textContent = '';
+        info.append('Fechamento de cada pregão, em R$, ajustado por desdobramentos. Último: ', h('b', null, rs(ultimo.v)), ' em ' + dataBR(ultimo.iso) + '. No intervalo: ', h('b', { class: cls(vr) }, pctS(vr)), ` · mínima ${rs(Math.min(...vals))} · máxima ${rs(Math.max(...vals))}.`);
+        G.tempo(g, { pts: s, series: [{ nome: 'Fechamento', key: 'v', cor: 'var(--s1)' }], area: true, zero: false, fmt: v => 'R$ ' + (v < 10 ? N2 : N0).format(v), titulo: p => dataBR(p.iso),
+          tooltip: (p, i) => { const r = [['Fechamento', rs(p.v)]]; if (i > 0) r.push(['Variação no dia', pctS(p.v / s[i - 1].v - 1)]); return r; } });
+      }
+      desenhar();
+    }).catch(() => c.remove());
   }
 
   function secaoCotacao(f) {
