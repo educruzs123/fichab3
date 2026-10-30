@@ -86,6 +86,7 @@
 
   // ---------- início ----------
   async function paginaInicio(q0) {
+    $('#busca-topo-in').value = q0; // texto vindo da busca do topo (/?q=...)
     document.title = 'FichaB3Completa — empresas';
     let st;
     try { st = await api('/api/status'); } catch (e) { app.textContent = 'Erro: ' + e.message; return; }
@@ -110,10 +111,6 @@
     }
     const rec = store.get('recentes', []);
     if (rec.length) app.appendChild(h('p', { class: 'acoes', style: 'margin:0 0 14px' }, h('span', { class: 'status', style: 'align-self:center' }, 'Recentes:'), rec.slice(0, 10).map(t => h('a', { class: 'chip', href: '/ficha?t=' + encodeURIComponent(t) }, t))));
-    const inp = h('input', { type: 'search', placeholder: 'Filtrar por ticker, nome ou setor', value: q0, style: 'width:100%;font:inherit;padding:9px 12px;border-radius:10px;border:1px solid var(--ln);background:var(--card);color:var(--tx);margin-bottom:12px' });
-    app.appendChild(inp);
-    const so = h('label', { class: 'status', style: 'display:inline-flex;gap:6px;align-items:center;margin:0 0 10px' }, h('input', { type: 'checkbox', checked: true }), 'Só companhias ativas na CVM');
-    app.appendChild(so);
     // colunas: título, valor para ordenar, célula, classe (n = número; s0/s1/s2 somem em telas cada vez mais estreitas)
     const triN = t => { const m = /^(\d)T(\d\d)$/.exec(t || ''); return m ? +m[2] * 10 + +m[1] : null; };
     const num = (k, fmt, neg) => [e => e[k], e => h('td', { class: 'n' + (neg && e[k] < 0 ? ' down' : '') }, fmt(e[k]))];
@@ -149,8 +146,8 @@
           c[0], ordem.i === i ? (ordem.dir > 0 ? ' ▲' : ' ▼') : ''))));
     }
     function desenhar() {
-      const q = norm(inp.value.trim()), soAt = so.querySelector('input').checked;
-      const lista = es.filter(e => (!soAt || e.ativa) && (!q || norm(e.tickers.join(' ') + ' ' + e.nome + ' ' + e.setor).includes(q)));
+      const q = norm(q0.trim());
+      const lista = es.filter(e => e.ativa && (!q || norm(e.tickers.join(' ') + ' ' + e.nome + ' ' + e.setor).includes(q)));
       const chave = cols[ordem.i][1];
       // vazios sempre no fim, nos dois sentidos
       lista.sort((a, b) => { const x = chave(a), y = chave(b), vx = x == null || x === '', vy = y == null || y === ''; if (vx || vy) return vx - vy; return (typeof x === 'string' ? x.localeCompare(y, 'pt-BR') : x - y) * ordem.dir; });
@@ -158,13 +155,11 @@
       lista.slice(0, 600).forEach(e => {
         corpo.appendChild(h('tr', { onclick: () => { location.href = '/ficha?t=' + encodeURIComponent(e.ticker); } }, cols.map(c => { const td = c[2](e); if (c[3]) td.classList.add(...c[3].split(' ')); return td; })));
       });
-      cont.textContent = lista.length + ' empresas' + (lista.length > 600 ? ' (mostrando 600; refine a busca)' : '');
+      cont.textContent = lista.length + (lista.length === 1 ? ' empresa' : ' empresas') + (lista.length > 600 ? ' (mostrando 600; refine a busca)' : '');
+      if (q) cont.append(` para “${q0.trim()}” · `, h('a', { href: '/' }, 'ver todas'));
     }
     cabecalho();
-    inp.addEventListener('input', desenhar);
-    so.querySelector('input').addEventListener('change', desenhar);
     desenhar();
-    inp.focus();
   }
 
   // log das entregas das empresas à CVM (RAD) inseridas no banco, recolhível no fim da página
