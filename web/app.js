@@ -46,6 +46,24 @@
   // ---------- busca no topo ----------
   let empresasCache = null;
   async function empresas() { if (!empresasCache) empresasCache = await api('/api/empresas'); return empresasCache; }
+  // autocompletar: sugestões de ticker (com o nome da empresa), carregadas no primeiro foco
+  const buscaIn = $('#busca-topo-in');
+  buscaIn.addEventListener('focus', async () => {
+    const dl = $('#busca-tickers');
+    if (dl.childElementCount) return;
+    try {
+      const ops = [];
+      (await empresas()).filter(e => e.ativa).forEach(e => e.tickers.forEach(t => ops.push(h('option', { value: t }, e.nome))));
+      ops.sort((a, b) => a.value.localeCompare(b.value));
+      dl.append(...ops);
+    } catch (e) { /* banco não importado: a busca segue sem sugestões */ }
+  });
+  // escolher uma sugestão abre a ficha; digitar normalmente não
+  buscaIn.addEventListener('input', async ev => {
+    if (ev.inputType && ev.inputType !== 'insertReplacementText') return;
+    const t = buscaIn.value.trim().toUpperCase();
+    try { if ((await empresas()).some(e => e.tickers.includes(t))) location.href = '/ficha?t=' + encodeURIComponent(t); } catch (e) { }
+  });
   $('#busca-topo').addEventListener('submit', async ev => {
     ev.preventDefault();
     const q = $('#busca-topo-in').value.trim();
