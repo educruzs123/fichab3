@@ -110,7 +110,6 @@
     }
     const rec = store.get('recentes', []);
     if (rec.length) app.appendChild(h('p', { class: 'acoes', style: 'margin:0 0 14px' }, h('span', { class: 'status', style: 'align-self:center' }, 'Recentes:'), rec.slice(0, 10).map(t => h('a', { class: 'chip', href: '/ficha?t=' + encodeURIComponent(t) }, t))));
-    if (st.fonte === 'supabase') logCVM();
     const inp = h('input', { type: 'search', placeholder: 'Filtrar por ticker, nome ou setor', value: q0, style: 'width:100%;font:inherit;padding:9px 12px;border-radius:10px;border:1px solid var(--ln);background:var(--card);color:var(--tx);margin-bottom:12px' });
     app.appendChild(inp);
     const so = h('label', { class: 'status', style: 'display:inline-flex;gap:6px;align-items:center;margin:0 0 10px' }, h('input', { type: 'checkbox', checked: true }), 'Só companhias ativas na CVM');
@@ -139,6 +138,7 @@
     app.appendChild(h('div', { class: 'tabela-wrap', style: 'max-height:none' }, h('table', { class: 't lista' }, h('thead', null, cab), corpo)));
     app.appendChild(cont);
     app.appendChild(h('p', { class: 'desc' }, 'Números dos 12 meses até o último trimestre informado à CVM; cotação, P/L e DY pelas cotações mensais do Supabase (P/L sobre o lucro dos controladores). Clique no título de uma coluna para ordenar.'));
+    if (st.fonte === 'supabase') logCVM();
     let es = [];
     try { es = await empresas(); } catch (e) { cont.textContent = e.message; return; }
     const norm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -167,7 +167,7 @@
     inp.focus();
   }
 
-  // log das entregas das empresas à CVM (RAD) inseridas no banco, recolhível acima da lista
+  // log das entregas das empresas à CVM (RAD) inseridas no banco, recolhível no fim da página
   function logCVM() {
     const resumo = h('span', { class: 'status' }, 'carregando…');
     const corpo = h('div');
