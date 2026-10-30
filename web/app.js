@@ -448,11 +448,13 @@
     const cDem = card(h('h2', null, 'Demonstrativos em PDF'), h('p', { class: 'desc' }, 'Arquivos salvos na pasta do projeto, como publicados pela empresa. Abrem em uma nova aba.'), linksDem);
     cDem.classList.add('noprint');
     app.appendChild(cDem);
-    api('/api/demonstrativos?t=' + encodeURIComponent(f.ticker)).then(l => {
+    // a pasta pode ter o nome de qualquer ticker da empresa (VIVT3 e VIVT4 usam a mesma)
+    Promise.all(f.tickers.map(t => api('/api/demonstrativos?t=' + encodeURIComponent(t)).then(l => l.map(a => ({ ...a, pasta: t }))))).then(ls => {
+      const l = ls.flat().filter((a, i, v) => v.findIndex(b => b.nome === a.nome) === i);
       if (!l.length) { cDem.remove(); return; }
       // TIM_DF_2T26.pdf → 2T26, do mais recente para o mais antigo
       const per = a => { const m = /([1-4])T(\d\d)/.exec(a.nome); return m ? { rot: m[1] + 'T' + m[2], ord: +m[2] * 10 + +m[1] } : { rot: a.nome.replace(/\.pdf$/, ''), ord: 0 }; };
-      linksDem.append(...l.map(a => ({ ...a, ...per(a) })).sort((a, b) => b.ord - a.ord).map(a => h('a', { class: 'chip', href: '/demonstrativos/' + encodeURIComponent(f.ticker) + '/' + encodeURIComponent(a.nome), target: '_blank', rel: 'noopener', title: a.nome + ' · ' + N1.format(a.tamanho / 1e6) + ' MB' }, 'PDF ' + a.rot)));
+      linksDem.append(...l.map(a => ({ ...a, ...per(a) })).sort((a, b) => b.ord - a.ord).map(a => h('a', { class: 'chip', href: '/demonstrativos/' + encodeURIComponent(a.pasta) + '/' + encodeURIComponent(a.nome), target: '_blank', rel: 'noopener', title: a.nome + ' · ' + N1.format(a.tamanho / 1e6) + ' MB' }, 'PDF ' + a.rot)));
     }).catch(() => cDem.remove());
 
     // links para as demonstrações de cada ITR (o card some se o banco não tiver nenhum)
