@@ -111,6 +111,8 @@
     }
     const rec = store.get('recentes', []);
     if (rec.length) app.appendChild(h('p', { class: 'acoes', style: 'margin:0 0 14px' }, h('span', { class: 'status', style: 'align-self:center' }, 'Recentes:'), rec.slice(0, 10).map(t => h('a', { class: 'chip', href: '/ficha?t=' + encodeURIComponent(t) }, t))));
+    if (st.fonte === 'supabase') app.appendChild(painelTop20());
+    app.appendChild(h('h2', { style: 'margin:28px 0 10px' }, 'Todas as empresas'));
     // colunas: título, valor para ordenar, célula, classe (n = número; s0/s1/s2 somem em telas cada vez mais estreitas)
     const triN = t => { const m = /^(\d)T(\d\d)$/.exec(t || ''); return m ? +m[2] * 10 + +m[1] : null; };
     const num = (k, fmt, neg) => [e => e[k], e => h('td', { class: 'n' + (neg && e[k] < 0 ? ' down' : '') }, fmt(e[k]))];
@@ -163,6 +165,90 @@
     cabecalho();
     so.querySelector('input').addEventListener('change', desenhar);
     desenhar();
+  }
+
+  // ---------- início: as 20 maiores (esquerda) e o mapa de variação do dia (direita) ----------
+  function painelTop20() {
+    const esq = h('div'), dir = h('div'), periodo = h('p', { class: 'desc' }, 'Carregando…');
+    api('/api/top20').then(l => {
+      const c0 = l.find(x => x.cotacao);
+      periodo.textContent = c0 ? `Pregão de ${dataBR(c0.cotacao.data)} às ${c0.cotacao.hora}, pelo Yahoo Finance.` : 'Sem cotações do dia.';
+      esq.appendChild(h('div', { class: 'tabela-wrap', style: 'max-height:none' }, h('table', { class: 't top20' },
+        h('thead', null, h('tr', null, ['#', 'Ticker', 'Empresa', 'Valor (R$ bi)'].map((c, i) => h('th', { class: i === 3 ? 'n' : '' }, c)))),
+        h('tbody', null, l.map(x => h('tr', null,
+          h('td', null, x.posicao),
+          h('td', null, h('a', { href: '/ficha?t=' + encodeURIComponent(x.ticker) }, x.ticker)),
+          h('td', { style: 'white-space:normal' }, x.empresa, x.estimado ? h('span', { class: 'status', title: 'valor de mercado estimado pelo app' }, ' *') : null),
+          h('td', { class: 'n' }, N1.format(+x.valor_mercado_bi))))))));
+      dir.appendChild(graficoMapa(l));
+    }).catch(e => { periodo.textContent = ''; esq.append(aviso('erro', e.message)); dir.append(aviso('erro', e.message)); });
+    return h('div', { class: 'inicio-duas secao' },
+      card(h('h2', null, 'Maiores empresas da B3'), h('p', { class: 'desc' }, 'Por valor de mercado. Clique no ticker para abrir a ficha; * valor estimado.'), esq),
+      card(h('h2', null, 'Variação do dia'), h('p', { class: 'desc' }, 'Tamanho do bloco = valor de mercado. Cor = variação em relação ao fechamento anterior.'), periodo, dir));
+  }
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function svgEl(tag, attrs, ...kids) {
+    const e = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    kids.forEach(c => e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
+    return e;
+  }
+  // mapa de árvore (squarified): retângulos proporcionais a `v`, na ordem de `itens` (do maior para o menor)
+  function treemap(itens, x, y, w, h) {
+    const total = itens.reduce((s, i) => s + i.v, 0);
+    const piorRazao = (linha, lado) => {
+      const soma = linha.reduce((s, r) => s + r.a, 0), mx = Math.max(...linha.map(r => r.a)), mn = Math.min(...linha.map(r => r.a));
+      return Math.max(lado * lado * mx / (soma * soma), soma * soma / (lado * lado * mn));
+    };
+    let resto = itens.map(i => ({ i, a: i.v / total * w * h })), out = [];
+    while (resto.length) {
+      const lado = Math.min(w, h);
+      let linha = [resto[0]], k = 1;
+      while (k < resto.length && piorRazao(linha.concat(resto[k]), lado) <= piorRazao(linha, lado)) linha.push(resto[k++]);
+      resto = resto.slice(k);
+      const soma = linha.reduce((s, r) => s + r.a, 0);
+      if (w >= h) { // linha vertical à esquerda
+        const lw = soma / h; let yy = y;
+        linha.forEach(r => { const lh = r.a / lw; out.push({ item: r.i, x, y: yy, w: lw, h: lh }); yy += lh; });
+        x += lw; w -= lw;
+      } else { // linha horizontal no topo
+        const lh = soma / w; let xx = x;
+        linha.forEach(r => { const lw = r.a / lh; out.push({ item: r.i, x: xx, y, w: lw, h: lh }); xx += lw; });
+        y += lh; h -= lh;
+      }
+    }
+    return out;
+  }
+  // cores da variação do dia (a mesma escala de cinco faixas da legenda)
+  const FAIXAS_VAR = [
+    { ate: -15, cor: '#A21F1A', tx: '#FFFFFF', rotulo: '≤ −15%' },
+    { ate: -5, cor: '#DE6F69', tx: '#FFFFFF', rotulo: '−15% a −5%' },
+    { ate: 0, cor: '#F2B8B4', tx: '#111827', rotulo: '−5% a 0%' },
+    { ate: 5, cor: '#A8DCD5', tx: '#111827', rotulo: '0% a +5%' },
+    { ate: Infinity, cor: '#3E9A8A', tx: '#FFFFFF', rotulo: '≥ +5%' }
+  ];
+  const faixaVar = p => p == null ? { cor: '#D1D5DB', tx: '#111827' } : FAIXAS_VAR.find(f => p * 100 <= f.ate);
+  // tamanho do bloco = valor de mercado; cor = variação do dia sobre o fechamento anterior
+  function graficoMapa(l) {
+    const itens = l.map(x => {
+      const c = x.cotacao, p = c && c.anterior > 0 && c.preco > 0 ? c.preco / c.anterior - 1 : null;
+      return { ticker: x.ticker, v: +x.valor_mercado_bi, p, c };
+    }).sort((a, b) => b.v - a.v);
+    const W = 520, H = 400;
+    const s = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Mapa das 20 maiores: tamanho é o valor de mercado, cor é a variação do dia' });
+    treemap(itens, 0, 0, W, H).forEach(({ item, x, y, w, h }) => {
+      const f = faixaVar(item.p), fs = Math.min(16, Math.max(8, w / 5.5));
+      const g = svgEl('g', {}, svgEl('title', {}, `${item.ticker}: variação ${pctS(item.p)} · cotação ${rs(item.c && item.c.preco)} · valor R$ ${N1.format(item.v)} bi`));
+      g.appendChild(svgEl('rect', { x, y, width: w, height: h, style: `fill:${f.cor};stroke:var(--card);stroke-width:2` }));
+      if (w >= 40 && h >= 26) {
+        g.appendChild(svgEl('text', { x: x + w / 2, y: y + h / 2 + (item.p == null || h < 44 ? fs / 3 : -2), 'text-anchor': 'middle', style: `fill:${f.tx};font-size:${fs}px;font-weight:700` }, item.ticker));
+        if (item.p != null && h >= 44) g.appendChild(svgEl('text', { x: x + w / 2, y: y + h / 2 + fs, 'text-anchor': 'middle', style: `fill:${f.tx};font-size:${fs * 0.7}px` }, pctS(item.p)));
+      }
+      s.appendChild(g);
+    });
+    const legenda = h('div', { class: 'leg' }, FAIXAS_VAR.map(f => h('span', null, h('i', { style: `background:${f.cor}` }), f.rotulo)));
+    return h('div', null, h('div', { class: 'graf' }, s), legenda);
   }
 
   // situação da atualização de cotações, uma linha por ticker (não é histórico de execuções)
@@ -285,7 +371,7 @@
     app.appendChild(h('p', { class: 'kicker' }, [f.setor, f.tipo, f.ativa ? null : 'cancelada na CVM'].filter(Boolean).join(' · ')));
     app.appendChild(h('h1', null, (f.nome_curto || f.empresa) + ' · ' + f.ticker));
     app.appendChild(h('p', { class: 'sub' }, h('span', { class: 'chips' }, f.tickers.map(x => h('a', { class: x === f.ticker ? 'chip' : 'chip cinza', href: '/ficha?t=' + x }, x))), '  ',
-      `${f.empresa} · CNPJ ${f.cnpj} · DFP até ${f.ult_dfp} · trimestres até ${f.ult_tri || '—'}` + (at.cotacao_data ? ` · cotação de ${dataBR(at.cotacao_data)}` : '')));
+      `${f.empresa} · CNPJ ${f.cnpj} · DFP até ${f.ult_dfp} · trimestres até ${f.ult_tri || '—'}` + (at.cotacao_data ? ` · cotação de ${dataBR(at.cotacao_data)}` + (at.cotacao_hora ? ` às ${at.cotacao_hora} (Yahoo Finance)` : '') : '')));
     const barra = h('div', { class: 'acoes noprint', style: 'margin:-6px 0 18px' },
       h('button', { class: 'btn', onclick: () => paginaFicha(f.ticker, true) }, 'Atualizar cotação'),
       h('button', { class: 'btn', onclick: () => baixarCSV(f) }, 'Baixar tabela (CSV)'),
@@ -308,7 +394,9 @@
     const tile = (k, v, d, c) => h('div', { class: 'tile' }, h('div', { class: 'k' }, k), h('div', { class: 'v ' + (c || '') }, v), h('div', { class: 'd' }, d || ''));
     const t1 = h('div', { class: 'tiles' });
     t1.append(
-      tile('Cotação', rs(at.cotacao), at.var_12m != null ? h('span', null, h('b', { class: cls(at.var_12m) }, pctS(at.var_12m)), ' em 12 meses') : (at.cotacao_data ? dataBR(at.cotacao_data) : 'sem cotação')),
+      tile('Cotação', rs(at.cotacao), h('span', null,
+        at.var_dia != null ? [h('b', { class: at.var_dia > 0 ? 'up' : at.var_dia < 0 ? 'down' : '', title: 'Fechamento anterior: ' + rs(at.cotacao_anterior) }, pctS(at.var_dia)), ' no dia', at.var_12m != null ? ' · ' : ''] : null,
+        at.var_12m != null ? [h('b', { class: cls(at.var_12m) }, pctS(at.var_12m)), ' em 12 meses'] : at.var_dia != null ? null : (at.cotacao_data ? dataBR(at.cotacao_data) : 'sem cotação'))),
       tile('P/L (12 meses)', xv(at.p_l), f.pl_media != null ? h('span', null, 'média ', h('b', null, xv(f.pl_media))) : ''),
       tile('P/VP', xv(at.p_vp), 'sobre o PL do ' + (f.ult_tri || 'último balanço')),
       tile('Dividend yield 12m', pct(at.dy_12m), at.proventos_12m_acao != null ? h('span', null, h('b', null, rs(at.proventos_12m_acao)), ' por ação') : ''),
@@ -443,16 +531,18 @@
       G.categorias(gTM, { cats: T.map(t => t.tri), series: [{ nome: 'Margem líquida', tipo: 'linha', cor: C2, vals: T.map(t => t.margem_liq) }], fmtEsq: v => N0.format(v * 100) + '%', zero: false, altura: 240, legenda: false, tooltip: tipT });
     }
 
-    // PDFs baixados para ~/FichaB3/demonstrativos/<TICKER> (o card some se a pasta não tiver nenhum)
+    // PDFs do Supabase e de ~/FichaB3/demonstrativos/<TICKER> (o card some se não houver nenhum)
     const linksDem = h('p', { class: 'acoes', style: 'margin:0' });
-    const cDem = card(h('h2', null, 'Demonstrativos em PDF'), h('p', { class: 'desc' }, 'Arquivos salvos na pasta do projeto, como publicados pela empresa. Abrem em uma nova aba.'), linksDem);
+    const cDem = card(h('h2', null, 'Demonstrativos em PDF'), h('p', { class: 'desc' }, 'Arquivos como publicados pela empresa. Abrem em uma nova aba.'), linksDem);
     cDem.classList.add('noprint');
     app.appendChild(cDem);
-    api('/api/demonstrativos?t=' + encodeURIComponent(f.ticker)).then(l => {
+    // a pasta pode ter o nome de qualquer ticker da empresa (VIVT3 e VIVT4 usam a mesma)
+    Promise.all(f.tickers.map(t => api('/api/demonstrativos?t=' + encodeURIComponent(t)))).then(ls => {
+      const l = ls.flat().filter((a, i, v) => v.findIndex(b => b.nome === a.nome) === i);
       if (!l.length) { cDem.remove(); return; }
       // TIM_DF_2T26.pdf → 2T26, do mais recente para o mais antigo
       const per = a => { const m = /([1-4])T(\d\d)/.exec(a.nome); return m ? { rot: m[1] + 'T' + m[2], ord: +m[2] * 10 + +m[1] } : { rot: a.nome.replace(/\.pdf$/, ''), ord: 0 }; };
-      linksDem.append(...l.map(a => ({ ...a, ...per(a) })).sort((a, b) => b.ord - a.ord).map(a => h('a', { class: 'chip', href: '/demonstrativos/' + encodeURIComponent(f.ticker) + '/' + encodeURIComponent(a.nome), target: '_blank', rel: 'noopener', title: a.nome + ' · ' + N1.format(a.tamanho / 1e6) + ' MB' }, 'PDF ' + a.rot)));
+      linksDem.append(...l.map(a => ({ ...a, ...per(a) })).sort((a, b) => b.ord - a.ord).map(a => h('a', { class: 'chip', href: a.url, target: '_blank', rel: 'noopener', title: a.nome + ' · ' + N1.format(a.tamanho / 1e6) + ' MB' }, 'PDF ' + a.rot)));
     }).catch(() => cDem.remove());
 
     // links para as demonstrações de cada ITR (o card some se o banco não tiver nenhum)

@@ -622,3 +622,35 @@ func (s *Supa) CotacoesDiarias(ticker string) ([]json.RawMessage, error) {
 	q := url.Values{"select": {"data,fechamento"}, "ticker": {"eq." + ticker}, "data": {"gte." + time.Now().AddDate(-5, 0, 0).Format("2006-01-02")}, "order": {"data"}}
 	return supaTodos[json.RawMessage](s, "cotacoes", q)
 }
+
+// As 20 maiores empresas por valor de mercado (tabela public.top20_valor_mercado, leitura pública).
+type Top20Linha struct {
+	Posicao    int         `json:"posicao"`
+	Ticker     string      `json:"ticker"`
+	Empresa    string      `json:"empresa"`
+	Valor      json.Number `json:"valor_mercado_bi"`
+	Estimado   bool        `json:"estimado"`
+	Referencia string      `json:"referencia"`
+}
+
+func (s *Supa) Top20() ([]Top20Linha, error) {
+	return supaTodos[Top20Linha](s, "top20_valor_mercado", url.Values{"select": {"posicao,ticker,empresa,valor_mercado_bi,estimado,referencia"}, "order": {"posicao"}})
+}
+
+// PDFs do bucket público demonstrativos listados para o ticker (tabela public.demonstrativos).
+func (s *Supa) Demonstrativos(ticker string) ([]map[string]any, error) {
+	var l []struct {
+		Arquivo string `json:"arquivo"`
+		Tamanho int64  `json:"tamanho"`
+	}
+	q := url.Values{"select": {"arquivo,tamanho"}, "ticker": {"eq." + ticker}}
+	if _, err := s.get("demonstrativos", q, -1, &l); err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(l))
+	for _, a := range l {
+		out = append(out, map[string]any{"nome": a.Arquivo, "tamanho": a.Tamanho,
+			"url": s.URL + "/storage/v1/object/public/demonstrativos/" + url.PathEscape(ticker) + "/" + url.PathEscape(a.Arquivo)})
+	}
+	return out, nil
+}

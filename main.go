@@ -28,7 +28,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.14.0"
+const versao = "1.16.0"
 
 var (
 	appDir  string
@@ -189,6 +189,7 @@ func main() {
 	mux.HandleFunc("/api/empresas", apiEmpresas)
 	mux.HandleFunc("/api/log-cvm", apiLogCVM)
 	mux.HandleFunc("/api/log-cotacoes", apiLogCotacoes)
+	mux.HandleFunc("/api/top20", apiTop20)
 	mux.HandleFunc("/api/cotacoes-diarias", apiCotacoesDiarias)
 	mux.HandleFunc("/api/demonstrativos", apiDemonstrativos)
 	mux.HandleFunc("/demonstrativos/", servirDemonstrativo)
@@ -530,16 +531,29 @@ var (
 	reArquivoPDF  = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.pdf$`)
 )
 
-// /api/demonstrativos?t=TIMS3 lista os PDFs de ~/FichaB3/demonstrativos/TIMS3
+// /api/demonstrativos?t=TIMS3 lista os PDFs do Supabase e os de ~/FichaB3/demonstrativos/TIMS3 que não estejam lá
 func apiDemonstrativos(w http.ResponseWriter, r *http.Request) {
 	t := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("t")))
 	out := []map[string]any{}
-	if reTickerPasta.MatchString(t) {
-		itens, _ := os.ReadDir(filepath.Join(appDir, "demonstrativos", t))
-		for _, it := range itens {
-			if info, err := it.Info(); err == nil && info.Mode().IsRegular() && reArquivoPDF.MatchString(it.Name()) {
-				out = append(out, map[string]any{"nome": it.Name(), "tamanho": info.Size()})
-			}
+	if !reTickerPasta.MatchString(t) {
+		writeJSON(w, out)
+		return
+	}
+	noBanco := map[string]bool{}
+	if usaSupa() {
+		l, err := fonteSupa().Demonstrativos(t)
+		if err != nil {
+			log.Printf("demonstrativos de %s no Supabase: %v", t, err)
+		}
+		for _, a := range l {
+			noBanco[a["nome"].(string)] = true
+			out = append(out, a)
+		}
+	}
+	itens, _ := os.ReadDir(filepath.Join(appDir, "demonstrativos", t))
+	for _, it := range itens {
+		if info, err := it.Info(); err == nil && info.Mode().IsRegular() && reArquivoPDF.MatchString(it.Name()) && !noBanco[it.Name()] {
+			out = append(out, map[string]any{"nome": it.Name(), "tamanho": info.Size(), "url": "/demonstrativos/" + t + "/" + it.Name()})
 		}
 	}
 	writeJSON(w, out)
@@ -561,12 +575,53 @@ func apiCotacoesDiarias(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 409, "as cotações diárias só existem com a fonte Supabase")
 		return
 	}
-	l, err := fonteSupa().CotacoesDiarias(strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("t"))))
+	t := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("t")))
+	l, err := fonteSupa().CotacoesDiarias(t)
 	if err != nil {
 		jsonErr(w, 502, err.Error())
 		return
 	}
+	// último pregão do Yahoo, se o banco ainda não o tiver
+	if u := UltimaCotacao(t, false); u != nil && len(l) > 0 {
+		var ult struct {
+			Data string `json:"data"`
+		}
+		if json.Unmarshal(l[len(l)-1], &ult) == nil && u.Data > ult.Data {
+			if b, err := json.Marshal(map[string]any{"data": u.Data, "fechamento": u.Preco}); err == nil {
+				l = append(l, b)
+			}
+		}
+	}
 	writeJSON(w, l)
+}
+
+// /api/top20: as 20 maiores da B3 (Supabase) com a última cotação do Yahoo de cada uma, em paralelo.
+func apiTop20(w http.ResponseWriter, r *http.Request) {
+	if !usaSupa() {
+		jsonErr(w, 409, "a lista das 20 maiores só existe com a fonte Supabase")
+		return
+	}
+	l, err := fonteSupa().Top20()
+	if err != nil {
+		jsonErr(w, 502, err.Error())
+		return
+	}
+	type item struct {
+		Top20Linha
+		Cotacao *UltimaCot `json:"cotacao"`
+	}
+	out := make([]item, len(l))
+	var wg sync.WaitGroup
+	for i, t := range l {
+		out[i] = item{Top20Linha: t}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out[i].Cotacao = UltimaCotacao(out[i].Ticker, false)
+		}()
+	}
+	wg.Wait()
+	writeJSON(w, out)
 }
 
 func apiLogCotacoes(w http.ResponseWriter, r *http.Request) {
@@ -726,7 +781,17 @@ func apiFicha(w http.ResponseWriter, r *http.Request) {
 	if serie == nil {
 		serie, avErr = ObterCotacoes(t, chave, filepath.Join(appDir, "cache"), forcar)
 	}
+	ult := UltimaCotacao(t, forcar)
+	serie = comUltimaCotacao(serie, ult)
 	f := MontarFicha(e, d, t, serie)
+	if ult != nil && f.Atual["cotacao_data"] == ult.Data {
+		f.Atual["cotacao_hora"] = ult.Hora
+		if ult.Anterior > 0 {
+			f.Atual["var_dia"] = ult.Preco/ult.Anterior - 1
+			f.Atual["cotacao_anterior"] = ult.Anterior
+		}
+		f.FonteCot += "; última cotação: Yahoo Finance"
+	}
 	if usaSupa() {
 		f.Fonte = "supabase"
 	} else {
