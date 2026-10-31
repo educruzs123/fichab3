@@ -167,7 +167,7 @@
     desenhar();
   }
 
-  // ---------- início: as 20 maiores (esquerda) e a faixa de negociação do dia (direita) ----------
+  // ---------- início: as 20 maiores (esquerda) e o mapa de variação do dia (direita) ----------
   function painelTop20() {
     const esq = h('div'), dir = h('div'), periodo = h('p', { class: 'desc' }, 'Carregando…');
     api('/api/top20').then(l => {
@@ -180,11 +180,11 @@
           h('td', null, h('a', { href: '/ficha?t=' + encodeURIComponent(x.ticker) }, x.ticker)),
           h('td', { style: 'white-space:normal' }, x.empresa, x.estimado ? h('span', { class: 'status', title: 'valor de mercado estimado pelo app' }, ' *') : null),
           h('td', { class: 'n' }, N1.format(+x.valor_mercado_bi))))))));
-      dir.appendChild(graficoFaixa(l));
+      dir.appendChild(graficoMapa(l));
     }).catch(e => { periodo.textContent = ''; esq.append(aviso('erro', e.message)); dir.append(aviso('erro', e.message)); });
     return h('div', { class: 'inicio-duas secao' },
       card(h('h2', null, 'Maiores empresas da B3'), h('p', { class: 'desc' }, 'Por valor de mercado. Clique no ticker para abrir a ficha; * valor estimado.'), esq),
-      card(h('h2', null, 'Mínima e máxima do dia'), periodo, dir));
+      card(h('h2', null, 'Variação do dia'), h('p', { class: 'desc' }, 'Tamanho do bloco = valor de mercado. Cor = variação em relação ao fechamento anterior.'), periodo, dir));
   }
 
   const SVGNS = 'http://www.w3.org/2000/svg';
@@ -194,36 +194,61 @@
     kids.forEach(c => e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
     return e;
   }
-  // uma linha por empresa, na mesma ordem da lista: barra da mínima à máxima do dia e ponto na cotação atual,
-  // em variação sobre o fechamento anterior (assim empresas de preços diferentes ficam na mesma escala)
-  function graficoFaixa(l) {
-    const linhas = l.map(x => {
-      const c = x.cotacao;
-      if (!c || !(c.anterior > 0) || !(c.minima > 0) || !(c.maxima > 0) || !(c.preco > 0)) return { ticker: x.ticker };
-      const v = p => p / c.anterior - 1;
-      return { ticker: x.ticker, c, atual: v(c.preco), min: Math.min(v(c.minima), v(c.preco)), max: Math.max(v(c.maxima), v(c.preco)) };
-    });
-    const com = linhas.filter(r => r.c);
-    if (!com.length) return h('p', { class: 'vazio' }, 'Sem cotações do dia para montar o gráfico.');
-    const lo = Math.min(0, ...com.map(r => r.min)), hi = Math.max(0, ...com.map(r => r.max));
-    const W = 520, rh = 32, topo = 30, esq = 58, dir = 62, H = topo + rh * linhas.length + 6;
-    const X = v => esq + (v - lo) / ((hi - lo) || 1) * (W - esq - dir);
-    const s = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Mínima e máxima do dia de cada empresa, em variação sobre o fechamento anterior' });
-    s.appendChild(svgEl('text', { x: X(lo), y: 14, 'text-anchor': 'start' }, pctS(lo)));
-    s.appendChild(svgEl('text', { x: X(0), y: 14, 'text-anchor': 'middle' }, '0%'));
-    s.appendChild(svgEl('text', { x: X(hi), y: 14, 'text-anchor': 'end' }, pctS(hi)));
-    s.appendChild(svgEl('line', { x1: X(0), x2: X(0), y1: topo - 4, y2: H - 4, style: 'stroke:var(--eixo);stroke-dasharray:3 3' }));
-    linhas.forEach((r, i) => {
-      const y = topo + rh * i + rh / 2;
-      s.appendChild(svgEl('text', { x: 0, y: y + 4, class: 'val' }, r.ticker));
-      if (!r.c) { s.appendChild(svgEl('text', { x: X(0) + 8, y: y + 4 }, 'sem dados')); return; }
-      const g = svgEl('g', {}, svgEl('title', {}, `${r.ticker}: mínima ${rs(r.c.minima)} · máxima ${rs(r.c.maxima)} · atual ${rs(r.c.preco)}`));
-      g.appendChild(svgEl('line', { x1: X(r.min), x2: X(r.max), y1: y, y2: y, 'stroke-width': 8, 'stroke-linecap': 'round', style: 'stroke:var(--a2);opacity:.45' }));
-      g.appendChild(svgEl('circle', { cx: X(r.atual), cy: y, r: 4.5, style: `fill:${r.atual >= 0 ? 'var(--ok)' : 'var(--bad)'}` }));
-      g.appendChild(svgEl('text', { x: W, y: y + 4, 'text-anchor': 'end', class: 'val' }, pctS(r.atual)));
+  // mapa de árvore (squarified): retângulos proporcionais a `v`, na ordem de `itens` (do maior para o menor)
+  function treemap(itens, x, y, w, h) {
+    const total = itens.reduce((s, i) => s + i.v, 0);
+    const piorRazao = (linha, lado) => {
+      const soma = linha.reduce((s, r) => s + r.a, 0), mx = Math.max(...linha.map(r => r.a)), mn = Math.min(...linha.map(r => r.a));
+      return Math.max(lado * lado * mx / (soma * soma), soma * soma / (lado * lado * mn));
+    };
+    let resto = itens.map(i => ({ i, a: i.v / total * w * h })), out = [];
+    while (resto.length) {
+      const lado = Math.min(w, h);
+      let linha = [resto[0]], k = 1;
+      while (k < resto.length && piorRazao(linha.concat(resto[k]), lado) <= piorRazao(linha, lado)) linha.push(resto[k++]);
+      resto = resto.slice(k);
+      const soma = linha.reduce((s, r) => s + r.a, 0);
+      if (w >= h) { // linha vertical à esquerda
+        const lw = soma / h; let yy = y;
+        linha.forEach(r => { const lh = r.a / lw; out.push({ item: r.i, x, y: yy, w: lw, h: lh }); yy += lh; });
+        x += lw; w -= lw;
+      } else { // linha horizontal no topo
+        const lh = soma / w; let xx = x;
+        linha.forEach(r => { const lw = r.a / lh; out.push({ item: r.i, x: xx, y, w: lw, h: lh }); xx += lw; });
+        y += lh; h -= lh;
+      }
+    }
+    return out;
+  }
+  // cores da variação do dia (a mesma escala de cinco faixas da legenda)
+  const FAIXAS_VAR = [
+    { ate: -15, cor: '#A21F1A', tx: '#FFFFFF', rotulo: '≤ −15%' },
+    { ate: -5, cor: '#DE6F69', tx: '#FFFFFF', rotulo: '−15% a −5%' },
+    { ate: 0, cor: '#F2B8B4', tx: '#111827', rotulo: '−5% a 0%' },
+    { ate: 5, cor: '#A8DCD5', tx: '#111827', rotulo: '0% a +5%' },
+    { ate: Infinity, cor: '#3E9A8A', tx: '#FFFFFF', rotulo: '≥ +5%' }
+  ];
+  const faixaVar = p => p == null ? { cor: '#D1D5DB', tx: '#111827' } : FAIXAS_VAR.find(f => p * 100 <= f.ate);
+  // tamanho do bloco = valor de mercado; cor = variação do dia sobre o fechamento anterior
+  function graficoMapa(l) {
+    const itens = l.map(x => {
+      const c = x.cotacao, p = c && c.anterior > 0 && c.preco > 0 ? c.preco / c.anterior - 1 : null;
+      return { ticker: x.ticker, v: +x.valor_mercado_bi, p, c };
+    }).sort((a, b) => b.v - a.v);
+    const W = 520, H = 400;
+    const s = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Mapa das 20 maiores: tamanho é o valor de mercado, cor é a variação do dia' });
+    treemap(itens, 0, 0, W, H).forEach(({ item, x, y, w, h }) => {
+      const f = faixaVar(item.p), fs = Math.min(16, Math.max(8, w / 5.5));
+      const g = svgEl('g', {}, svgEl('title', {}, `${item.ticker}: variação ${pctS(item.p)} · cotação ${rs(item.c && item.c.preco)} · valor R$ ${N1.format(item.v)} bi`));
+      g.appendChild(svgEl('rect', { x, y, width: w, height: h, style: `fill:${f.cor};stroke:var(--card);stroke-width:2` }));
+      if (w >= 40 && h >= 26) {
+        g.appendChild(svgEl('text', { x: x + w / 2, y: y + h / 2 + (item.p == null || h < 44 ? fs / 3 : -2), 'text-anchor': 'middle', style: `fill:${f.tx};font-size:${fs}px;font-weight:700` }, item.ticker));
+        if (item.p != null && h >= 44) g.appendChild(svgEl('text', { x: x + w / 2, y: y + h / 2 + fs, 'text-anchor': 'middle', style: `fill:${f.tx};font-size:${fs * 0.7}px` }, pctS(item.p)));
+      }
       s.appendChild(g);
     });
-    return h('div', { class: 'graf' }, s);
+    const legenda = h('div', { class: 'leg' }, FAIXAS_VAR.map(f => h('span', null, h('i', { style: `background:${f.cor}` }), f.rotulo)));
+    return h('div', null, h('div', { class: 'graf' }, s), legenda);
   }
 
   // situação da atualização de cotações, uma linha por ticker (não é histórico de execuções)
