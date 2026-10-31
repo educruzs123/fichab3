@@ -28,7 +28,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.16.0"
+const versao = "1.17.0"
 
 var (
 	appDir  string
@@ -189,6 +189,7 @@ func main() {
 	mux.HandleFunc("/api/empresas", apiEmpresas)
 	mux.HandleFunc("/api/log-cvm", apiLogCVM)
 	mux.HandleFunc("/api/log-cotacoes", apiLogCotacoes)
+	mux.HandleFunc("/api/fatos-relevantes", apiFatosRelevantes)
 	mux.HandleFunc("/api/cotacoes-diarias", apiCotacoesDiarias)
 	mux.HandleFunc("/api/demonstrativos", apiDemonstrativos)
 	mux.HandleFunc("/demonstrativos/", servirDemonstrativo)
@@ -600,6 +601,15 @@ func apiLogCotacoes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l, err := fonteSupa().LogCotacoes()
+	if err != nil {
+		jsonErr(w, 502, err.Error())
+		return
+	}
+	writeJSON(w, l)
+}
+
+func apiFatosRelevantes(w http.ResponseWriter, r *http.Request) {
+	l, err := UltimosFatos()
 	if err != nil {
 		jsonErr(w, 502, err.Error())
 		return

@@ -137,6 +137,7 @@
     app.appendChild(so);
     app.appendChild(cont);
     app.appendChild(h('p', { class: 'desc' }, 'Números dos 12 meses até o último trimestre informado à CVM; cotação, P/L e DY pelas cotações mensais do Supabase (P/L sobre o lucro dos controladores). Clique no título de uma coluna para ordenar.'));
+    fatosRelevantes();
     if (st.fonte === 'supabase') { logCVM(); logCotacoes(); }
     let es = [];
     try { es = await empresas(); } catch (e) { cont.textContent = e.message; return; }
@@ -163,6 +164,26 @@
     cabecalho();
     so.querySelector('input').addEventListener('change', desenhar);
     desenhar();
+  }
+
+  // últimos fatos relevantes, do conjunto IPE dos dados abertos da CVM
+  function fatosRelevantes() {
+    const resumo = h('p', { class: 'status', style: 'margin:0 0 6px' }, 'Carregando…');
+    const corpo = h('div');
+    app.appendChild(card(h('h2', null, 'Últimos fatos relevantes'), resumo, corpo));
+    api('/api/fatos-relevantes').then(async l => {
+      if (!l.length) { resumo.textContent = 'nenhum fato relevante encontrado'; return; }
+      const tickers = {};
+      try { (await empresas()).forEach(e => { tickers[e.cnpj] = e.ticker; }); } catch (e) { /* a lista funciona sem os links das fichas */ }
+      resumo.textContent = `${l.length} mais recentes · último entregue em ${dataBR(l[0].data)}`;
+      corpo.appendChild(h('p', { class: 'desc' }, 'PDFs entregues à CVM. O arquivo de dados abertos é atualizado cerca de uma vez por semana, então os fatos dos últimos dias podem ainda não aparecer.'));
+      corpo.appendChild(h('div', { class: 'tabela-wrap', style: 'max-height:360px' }, h('table', { class: 't' },
+        h('thead', null, h('tr', null, ['Entregue em', 'Empresa', 'Assunto'].map(c => h('th', null, c)))),
+        h('tbody', null, l.map(x => h('tr', null,
+          h('td', null, dataBR(x.data)),
+          h('td', { style: 'white-space:normal' }, tickers[x.cnpj] ? [h('a', { href: '/ficha?t=' + encodeURIComponent(tickers[x.cnpj]) }, tickers[x.cnpj]), ' '] : null, h('span', { class: 'status' }, x.empresa)),
+          h('td', { style: 'white-space:normal' }, h('a', { href: x.link, target: '_blank', rel: 'noopener' }, x.assunto || 'Fato relevante'))))))));
+    }).catch(e => { resumo.textContent = e.message; });
   }
 
   // situação da atualização de cotações, uma linha por ticker (não é histórico de execuções)
