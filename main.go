@@ -28,7 +28,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.15.1"
+const versao = "1.16.0"
 
 var (
 	appDir  string
@@ -530,16 +530,29 @@ var (
 	reArquivoPDF  = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.pdf$`)
 )
 
-// /api/demonstrativos?t=TIMS3 lista os PDFs de ~/FichaB3/demonstrativos/TIMS3
+// /api/demonstrativos?t=TIMS3 lista os PDFs do Supabase e os de ~/FichaB3/demonstrativos/TIMS3 que não estejam lá
 func apiDemonstrativos(w http.ResponseWriter, r *http.Request) {
 	t := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("t")))
 	out := []map[string]any{}
-	if reTickerPasta.MatchString(t) {
-		itens, _ := os.ReadDir(filepath.Join(appDir, "demonstrativos", t))
-		for _, it := range itens {
-			if info, err := it.Info(); err == nil && info.Mode().IsRegular() && reArquivoPDF.MatchString(it.Name()) {
-				out = append(out, map[string]any{"nome": it.Name(), "tamanho": info.Size()})
-			}
+	if !reTickerPasta.MatchString(t) {
+		writeJSON(w, out)
+		return
+	}
+	noBanco := map[string]bool{}
+	if usaSupa() {
+		l, err := fonteSupa().Demonstrativos(t)
+		if err != nil {
+			log.Printf("demonstrativos de %s no Supabase: %v", t, err)
+		}
+		for _, a := range l {
+			noBanco[a["nome"].(string)] = true
+			out = append(out, a)
+		}
+	}
+	itens, _ := os.ReadDir(filepath.Join(appDir, "demonstrativos", t))
+	for _, it := range itens {
+		if info, err := it.Info(); err == nil && info.Mode().IsRegular() && reArquivoPDF.MatchString(it.Name()) && !noBanco[it.Name()] {
+			out = append(out, map[string]any{"nome": it.Name(), "tamanho": info.Size(), "url": "/demonstrativos/" + t + "/" + it.Name()})
 		}
 	}
 	writeJSON(w, out)
