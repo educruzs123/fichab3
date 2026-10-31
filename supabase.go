@@ -623,6 +623,20 @@ func (s *Supa) CotacoesDiarias(ticker string) ([]json.RawMessage, error) {
 	return supaTodos[json.RawMessage](s, "cotacoes", q)
 }
 
+// As 20 maiores empresas por valor de mercado (tabela public.top20_valor_mercado, leitura pública).
+type Top20Linha struct {
+	Posicao    int         `json:"posicao"`
+	Ticker     string      `json:"ticker"`
+	Empresa    string      `json:"empresa"`
+	Valor      json.Number `json:"valor_mercado_bi"`
+	Estimado   bool        `json:"estimado"`
+	Referencia string      `json:"referencia"`
+}
+
+func (s *Supa) Top20() ([]Top20Linha, error) {
+	return supaTodos[Top20Linha](s, "top20_valor_mercado", url.Values{"select": {"posicao,ticker,empresa,valor_mercado_bi,estimado,referencia"}, "order": {"posicao"}})
+}
+
 // PDFs do bucket público demonstrativos listados para o ticker (tabela public.demonstrativos).
 func (s *Supa) Demonstrativos(ticker string) ([]map[string]any, error) {
 	var l []struct {

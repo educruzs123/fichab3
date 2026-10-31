@@ -189,6 +189,7 @@ func main() {
 	mux.HandleFunc("/api/empresas", apiEmpresas)
 	mux.HandleFunc("/api/log-cvm", apiLogCVM)
 	mux.HandleFunc("/api/log-cotacoes", apiLogCotacoes)
+	mux.HandleFunc("/api/top20", apiTop20)
 	mux.HandleFunc("/api/cotacoes-diarias", apiCotacoesDiarias)
 	mux.HandleFunc("/api/demonstrativos", apiDemonstrativos)
 	mux.HandleFunc("/demonstrativos/", servirDemonstrativo)
@@ -592,6 +593,35 @@ func apiCotacoesDiarias(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, l)
+}
+
+// /api/top20: as 20 maiores da B3 (Supabase) com a última cotação do Yahoo de cada uma, em paralelo.
+func apiTop20(w http.ResponseWriter, r *http.Request) {
+	if !usaSupa() {
+		jsonErr(w, 409, "a lista das 20 maiores só existe com a fonte Supabase")
+		return
+	}
+	l, err := fonteSupa().Top20()
+	if err != nil {
+		jsonErr(w, 502, err.Error())
+		return
+	}
+	type item struct {
+		Top20Linha
+		Cotacao *UltimaCot `json:"cotacao"`
+	}
+	out := make([]item, len(l))
+	var wg sync.WaitGroup
+	for i, t := range l {
+		out[i] = item{Top20Linha: t}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out[i].Cotacao = UltimaCotacao(out[i].Ticker, false)
+		}()
+	}
+	wg.Wait()
+	writeJSON(w, out)
 }
 
 func apiLogCotacoes(w http.ResponseWriter, r *http.Request) {

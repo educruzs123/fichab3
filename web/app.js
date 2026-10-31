@@ -111,6 +111,8 @@
     }
     const rec = store.get('recentes', []);
     if (rec.length) app.appendChild(h('p', { class: 'acoes', style: 'margin:0 0 14px' }, h('span', { class: 'status', style: 'align-self:center' }, 'Recentes:'), rec.slice(0, 10).map(t => h('a', { class: 'chip', href: '/ficha?t=' + encodeURIComponent(t) }, t))));
+    if (st.fonte === 'supabase') app.appendChild(painelTop20());
+    app.appendChild(h('h2', { style: 'margin:28px 0 10px' }, 'Todas as empresas'));
     // colunas: título, valor para ordenar, célula, classe (n = número; s0/s1/s2 somem em telas cada vez mais estreitas)
     const triN = t => { const m = /^(\d)T(\d\d)$/.exec(t || ''); return m ? +m[2] * 10 + +m[1] : null; };
     const num = (k, fmt, neg) => [e => e[k], e => h('td', { class: 'n' + (neg && e[k] < 0 ? ' down' : '') }, fmt(e[k]))];
@@ -163,6 +165,65 @@
     cabecalho();
     so.querySelector('input').addEventListener('change', desenhar);
     desenhar();
+  }
+
+  // ---------- início: as 20 maiores (esquerda) e a faixa de negociação do dia (direita) ----------
+  function painelTop20() {
+    const esq = h('div'), dir = h('div'), periodo = h('p', { class: 'desc' }, 'Carregando…');
+    api('/api/top20').then(l => {
+      const c0 = l.find(x => x.cotacao);
+      periodo.textContent = c0 ? `Pregão de ${dataBR(c0.cotacao.data)} às ${c0.cotacao.hora}, pelo Yahoo Finance.` : 'Sem cotações do dia.';
+      esq.appendChild(h('div', { class: 'tabela-wrap', style: 'max-height:none' }, h('table', { class: 't top20' },
+        h('thead', null, h('tr', null, ['#', 'Ticker', 'Empresa', 'Valor (R$ bi)'].map((c, i) => h('th', { class: i === 3 ? 'n' : '' }, c)))),
+        h('tbody', null, l.map(x => h('tr', null,
+          h('td', null, x.posicao),
+          h('td', null, h('a', { href: '/ficha?t=' + encodeURIComponent(x.ticker) }, x.ticker)),
+          h('td', { style: 'white-space:normal' }, x.empresa, x.estimado ? h('span', { class: 'status', title: 'valor de mercado estimado pelo app' }, ' *') : null),
+          h('td', { class: 'n' }, N1.format(+x.valor_mercado_bi))))))));
+      dir.appendChild(graficoFaixa(l));
+    }).catch(e => { periodo.textContent = ''; esq.append(aviso('erro', e.message)); dir.append(aviso('erro', e.message)); });
+    return h('div', { class: 'inicio-duas secao' },
+      card(h('h2', null, 'Maiores empresas da B3'), h('p', { class: 'desc' }, 'Por valor de mercado. Clique no ticker para abrir a ficha; * valor estimado.'), esq),
+      card(h('h2', null, 'Mínima e máxima do dia'), periodo, dir));
+  }
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function svgEl(tag, attrs, ...kids) {
+    const e = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    kids.forEach(c => e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
+    return e;
+  }
+  // uma linha por empresa, na mesma ordem da lista: barra da mínima à máxima do dia e ponto na cotação atual,
+  // em variação sobre o fechamento anterior (assim empresas de preços diferentes ficam na mesma escala)
+  function graficoFaixa(l) {
+    const linhas = l.map(x => {
+      const c = x.cotacao;
+      if (!c || !(c.anterior > 0) || !(c.minima > 0) || !(c.maxima > 0) || !(c.preco > 0)) return { ticker: x.ticker };
+      const v = p => p / c.anterior - 1;
+      return { ticker: x.ticker, c, atual: v(c.preco), min: Math.min(v(c.minima), v(c.preco)), max: Math.max(v(c.maxima), v(c.preco)) };
+    });
+    const com = linhas.filter(r => r.c);
+    if (!com.length) return h('p', { class: 'vazio' }, 'Sem cotações do dia para montar o gráfico.');
+    const lo = Math.min(0, ...com.map(r => r.min)), hi = Math.max(0, ...com.map(r => r.max));
+    const W = 520, rh = 32, topo = 30, esq = 58, dir = 62, H = topo + rh * linhas.length + 6;
+    const X = v => esq + (v - lo) / ((hi - lo) || 1) * (W - esq - dir);
+    const s = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Mínima e máxima do dia de cada empresa, em variação sobre o fechamento anterior' });
+    s.appendChild(svgEl('text', { x: X(lo), y: 14, 'text-anchor': 'start' }, pctS(lo)));
+    s.appendChild(svgEl('text', { x: X(0), y: 14, 'text-anchor': 'middle' }, '0%'));
+    s.appendChild(svgEl('text', { x: X(hi), y: 14, 'text-anchor': 'end' }, pctS(hi)));
+    s.appendChild(svgEl('line', { x1: X(0), x2: X(0), y1: topo - 4, y2: H - 4, style: 'stroke:var(--eixo);stroke-dasharray:3 3' }));
+    linhas.forEach((r, i) => {
+      const y = topo + rh * i + rh / 2;
+      s.appendChild(svgEl('text', { x: 0, y: y + 4, class: 'val' }, r.ticker));
+      if (!r.c) { s.appendChild(svgEl('text', { x: X(0) + 8, y: y + 4 }, 'sem dados')); return; }
+      const g = svgEl('g', {}, svgEl('title', {}, `${r.ticker}: mínima ${rs(r.c.minima)} · máxima ${rs(r.c.maxima)} · atual ${rs(r.c.preco)}`));
+      g.appendChild(svgEl('line', { x1: X(r.min), x2: X(r.max), y1: y, y2: y, 'stroke-width': 8, 'stroke-linecap': 'round', style: 'stroke:var(--a2);opacity:.45' }));
+      g.appendChild(svgEl('circle', { cx: X(r.atual), cy: y, r: 4.5, style: `fill:${r.atual >= 0 ? 'var(--ok)' : 'var(--bad)'}` }));
+      g.appendChild(svgEl('text', { x: W, y: y + 4, 'text-anchor': 'end', class: 'val' }, pctS(r.atual)));
+      s.appendChild(g);
+    });
+    return h('div', { class: 'graf' }, s);
   }
 
   // situação da atualização de cotações, uma linha por ticker (não é histórico de execuções)

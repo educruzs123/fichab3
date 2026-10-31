@@ -43,6 +43,12 @@ h3 { font-size: 15px; margin: 18px 0 6px; }
 
 .card { background: var(--card); border: 1px solid var(--ln); border-radius: 14px; padding: 18px 20px; box-shadow: var(--sombra); min-width: 0; }
 .secao { margin-top: 16px; }
+.inicio-duas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .inicio-duas { grid-template-columns: 1fr; } }
+table.top20 td { height: 32px; }
+table.top20 td:first-child { font-weight: 400; color: var(--mu); }
+table.top20 td:nth-child(2) a { font-weight: 650; }
+@media (max-width: 600px) { table.top20 th:first-child, table.top20 td:first-child { display: none; } }
 .grade2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 860px) { .grade2 { grid-template-columns: 1fr; } }
 .cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }

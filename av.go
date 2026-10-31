@@ -156,10 +156,12 @@ func TestarChave(chave string) (float64, string, error) {
 
 // Última cotação no Yahoo Finance (a mesma fonte do yfinance), guardada por 5 minutos.
 type UltimaCot struct {
-	Preco    float64
-	Anterior float64 // fechamento do pregão anterior; 0 se o Yahoo não informar
-	Data     string  // AAAA-MM-DD do pregão, no horário da bolsa
-	Hora     string  // HH:MM
+	Preco    float64 `json:"preco"`
+	Anterior float64 `json:"anterior"` // fechamento do pregão anterior; 0 se o Yahoo não informar
+	Minima   float64 `json:"minima"`   // mínima e máxima do pregão (0 se o Yahoo não informar)
+	Maxima   float64 `json:"maxima"`
+	Data     string  `json:"data"` // AAAA-MM-DD do pregão, no horário da bolsa
+	Hora     string  `json:"hora"` // HH:MM
 	em       time.Time
 }
 
@@ -191,6 +193,8 @@ func UltimaCotacao(ticker string, forcar bool) *UltimaCot {
 					Meta struct {
 						Preco    float64 `json:"regularMarketPrice"`
 						Anterior float64 `json:"chartPreviousClose"`
+						Minima   float64 `json:"regularMarketDayLow"`
+						Maxima   float64 `json:"regularMarketDayHigh"`
 						Tempo    int64   `json:"regularMarketTime"`
 						Offset   int     `json:"gmtoffset"`
 					} `json:"meta"`
@@ -201,7 +205,8 @@ func UltimaCotacao(ticker string, forcar bool) *UltimaCot {
 			m := j.Chart.Result[0].Meta
 			if m.Preco > 0 && m.Tempo > 0 {
 				t := time.Unix(m.Tempo, 0).In(time.FixedZone("B3", m.Offset))
-				n.Preco, n.Anterior, n.Data, n.Hora = m.Preco, m.Anterior, t.Format("2006-01-02"), t.Format("15:04")
+				n.Preco, n.Anterior, n.Minima, n.Maxima = m.Preco, m.Anterior, m.Minima, m.Maxima
+				n.Data, n.Hora = t.Format("2006-01-02"), t.Format("15:04")
 			}
 		}
 	}
