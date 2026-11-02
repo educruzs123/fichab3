@@ -66,7 +66,7 @@
     return s('circle', { cx: x, cy: y, r: 4, fill: vazado ? 'var(--card)' : cor, stroke: vazado ? cor : 'var(--card)', 'stroke-width': 2 }, g);
   }
 
-  /* Categorias (anos): barras e/ou linhas numa escala só. */
+  /* Categorias (anos): barras e/ou linhas numa escala só; série com dir: true usa o eixo da direita (fmtDir). */
   function categorias(el, o) {
     const fn = () => {
       el.textContent = '';
@@ -76,18 +76,28 @@
       if (o.legenda !== false && o.series.length > 1) legenda(el, o.series);
       const W = Math.max(300, el.clientWidth), H = o.altura || 280;
       const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', role: 'img', 'aria-label': o.aria || '' }, el);
-      let mn = Infinity, mx = -Infinity;
-      o.series.forEach(x => x.vals.forEach(v => { if (v != null && isFinite(v)) { mn = Math.min(mn, v); mx = Math.max(mx, v); } }));
+      let mn = Infinity, mx = -Infinity, mn2 = 0, mx2 = 0;
+      o.series.forEach(x => x.vals.forEach(v => { if (v == null || !isFinite(v)) return; if (x.dir) { mn2 = Math.min(mn2, v); mx2 = Math.max(mx2, v); } else { mn = Math.min(mn, v); mx = Math.max(mx, v); } }));
+      if (mn === Infinity) { mn = 0; mx = 0; }
       (o.refs || []).forEach(r => { mn = Math.min(mn, r.valor); mx = Math.max(mx, r.valor); });
       if (o.series.some(x => x.tipo !== 'linha') || o.zero !== false) { mn = Math.min(0, mn); mx = Math.max(0, mx); }
       const tk = niceTicks(mn, mx, 5), fE = o.fmtEsq || (v => v);
-      const mt = o.rotulos ? 34 : 14, mb = 26, mr = 8;
+      // eixo da direita nas mesmas linhas de grade, com o zero na mesma altura do da esquerda
+      const temDir = o.series.some(x => x.dir), fD = o.fmtDir || (v => v), tk2 = [];
+      if (temDir) {
+        const st = tk[1] - tk[0], nA = Math.max(1, Math.round(tk[tk.length - 1] / st)), nB = Math.round(-tk[0] / st);
+        const p0 = (mx2 || 1) / nA, mag = Math.pow(10, Math.floor(Math.log10(p0))), st2 = [1, 2, 5, 10].find(m => m * mag >= p0 - 1e-9) * mag;
+        for (let i = -nB; i <= tk.length - 1 - nB; i++) tk2.push(+(i * st2).toFixed(10));
+      }
+      const mt = o.rotulos ? 34 : 14, mb = 26, mr = temDir ? Math.max(...tk2.map(v => medir(svg, fD(v)))) + 12 : 8;
       const ml = Math.max(...tk.map(v => medir(svg, fE(v)))) + 12;
       const Y = escala(tk[0], tk[tk.length - 1], H - mb, mt);
+      const Y2 = temDir ? escala(tk2[0], tk2[tk2.length - 1], H - mb, mt) : Y;
       const n = cats.length, step = (W - ml - mr) / n;
       const cx = i => ml + step * (i + .5);
       const g = s('g', {}, svg);
       tk.forEach(v => { s('line', { x1: ml, x2: W - mr, y1: Y(v), y2: Y(v), stroke: v === 0 ? 'var(--eixo)' : 'var(--grade)', 'stroke-width': 1 }, g); txt(g, ml - 6, Y(v) + 4, fE(v), { 'text-anchor': 'end' }); });
+      tk2.forEach(v => { if (v >= 0) txt(g, W - mr + 6, Y2(v) + 4, fD(v), { 'text-anchor': 'start' }); });
       (o.refs || []).forEach(r => { const y = Y(r.valor); s('line', { x1: ml, x2: W - mr, y1: y, y2: y, stroke: 'var(--eixo)', 'stroke-dasharray': '5,4', 'stroke-width': 1 }, g); if (r.rotulo) txt(g, ml + 4, y - 5, r.rotulo, { 'text-anchor': 'start' }); });
       const barras = o.series.filter(x => x.tipo !== 'linha');
       const nb = barras.length, gap = 2, bw = Math.max(2, Math.min(24, (step * .7 - gap * (nb - 1)) / Math.max(1, nb)));
@@ -100,10 +110,11 @@
         });
       });
       o.series.filter(x => x.tipo === 'linha').forEach(x => {
+        const Yx = x.dir ? Y2 : Y;
         let d = '', on = false;
-        x.vals.forEach((v, i) => { if (v == null || !isFinite(v)) { on = false; return; } d += (on ? 'L' : 'M') + cx(i).toFixed(1) + ',' + Y(v).toFixed(1); on = true; });
+        x.vals.forEach((v, i) => { if (v == null || !isFinite(v)) { on = false; return; } d += (on ? 'L' : 'M') + cx(i).toFixed(1) + ',' + Yx(v).toFixed(1); on = true; });
         s('path', { d, fill: 'none', stroke: x.cor, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, g);
-        x.vals.forEach((v, i) => { if (v == null || !isFinite(v)) return; ponto(g, cx(i), Y(v), x.cor, o.parcial && o.parcial[i]); });
+        x.vals.forEach((v, i) => { if (v == null || !isFinite(v)) return; ponto(g, cx(i), Yx(v), x.cor, o.parcial && o.parcial[i]); });
       });
       if (o.rotulos) {
         const sr = o.series[o.rotulos.serie || 0];

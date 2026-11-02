@@ -232,6 +232,7 @@ func CarregarBanco(pasta string) (*Banco, error) {
 	if err := json.Unmarshal(eb, &b.Empresas); err != nil {
 		return nil, err
 	}
+	b.Empresas = naCarteira(b.Empresas)
 	for _, e := range b.Empresas {
 		for _, t := range e.Tickers {
 			if _, ok := b.porTk[t]; !ok {

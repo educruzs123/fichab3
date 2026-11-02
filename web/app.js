@@ -403,6 +403,13 @@
       refs: f.pl_media != null ? [{ valor: f.pl_media, rotulo: 'média ' + xv(f.pl_media) }] : [], rotulos: { fmt: v => N1.format(v) + 'x', amostra: '00,0x' }, vazio: temPreco ? 'Sem lucro por ação para calcular o P/L.' : 'Cadastre a chave da Alpha Vantage para ver o P/L.',
       tooltip: i => { const r = Apl[i]; return [['P/L', r.p_l != null && r.p_l < 0 ? 'prejuízo' : xv(r.p_l), C1], [r.parcial ? 'Cotação atual' : 'Preço no fim do ano', rs(r.preco)], ['Lucro por ação', rs(r.lpa)], ['P/VP', xv(r.p_vp)], ['Valor de mercado', r.valor_mercado_bi != null ? 'R$ ' + N1.format(r.valor_mercado_bi) + ' bi' : null]]; } });
 
+    // lucro x cotação
+    const gLC = h('div', { class: 'graf' });
+    app.appendChild(card(h('h2', null, 'Lucro × cotação'), h('p', { class: 'desc' }, `Barras: lucro dos controladores, ${un} (eixo da esquerda). Linha: preço de fechamento do último pregão de cada ano, ajustado por desdobramentos (eixo da direita, R$). `, A.some(r => r.parcial) ? `${cats[cats.length - 1]}: lucro dos ${f.periodo_12m} e cotação atual.` : ''), gLC));
+    G.categorias(gLC, { cats, parcial: parc, series: [{ nome: 'Lucro dos controladores', cor: C1, corNeg: 'var(--bad)', vals: A.map(r => ok(r.lucro_ctrl) ? r.lucro_ctrl / div : null) }, { nome: 'Cotação', tipo: 'linha', dir: true, cor: C2, vals: A.map(r => r.preco) }],
+      fmtEsq: fa, fmtDir: v => 'R$ ' + (v < 10 ? N2 : N0).format(v), vazio: temPreco ? 'Sem dados de lucro.' : 'Cadastre a chave da Alpha Vantage para ver a cotação.',
+      titulo: i => A[i].parcial ? cats[i] + ' · ' + f.periodo_12m : cats[i], tooltip: i => [['Lucro dos controladores', mi(A[i].lucro_ctrl), C1], [A[i].parcial ? 'Cotação atual' : 'Preço no fim do ano', rs(A[i].preco), C2], ['P/L', A[i].p_l != null && A[i].p_l < 0 ? 'prejuízo' : xv(A[i].p_l)]] });
+
     // cotação
     if (temPreco) secaoCotacao(f);
 
