@@ -1,0 +1,7 @@
+{
+  "name": "fichab3-site",
+  "private": true,
+  "dependencies": {
+    "jszip": "3.10.1"
+  }
+}
