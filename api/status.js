@@ -8,9 +8,9 @@ module.exports = async (req, res) => {
     const m = await get('meta', { select: '*' });
     if (!m.length) throw new Error('o banco do Supabase ainda não tem carga concluída');
     sp.meta = m[0];
-    res.json({ fonte: 'supabase', banco_pronto: true, supabase: sp });
+    res.json({ fonte: 'supabase', hospedagem: 'vercel', banco_pronto: true, supabase: sp });
   } catch (e) {
     sp.erro = e.message;
-    res.json({ fonte: 'supabase', banco_pronto: false, supabase: sp });
+    res.json({ fonte: 'supabase', hospedagem: 'vercel', banco_pronto: false, supabase: sp });
   }
 };

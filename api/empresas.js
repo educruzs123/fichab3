@@ -4,8 +4,8 @@ const { todos } = require('../lib/supa');
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=900');
   try {
-    const rows = await todos('empresas', { select: 'id,nome,nome_curto,setor,ativa,tickers', tickers: 'neq.{}', ult_dfp: 'not.is.null', order: 'id' });
-    res.json(rows.map(r => ({ ...r, nome: r.nome_curto || r.nome })));
+    const rows = await todos('empresas', { select: 'id,cnpj,nome,nome_curto,setor,ativa,tickers', tickers: 'neq.{}', ult_dfp: 'not.is.null', order: 'id' });
+    res.json(rows.map(r => ({ ...r, nome: r.nome_curto || r.nome, ticker: r.tickers[0] })));
   } catch (e) {
     res.status(502).json({ erro: e.message });
   }
