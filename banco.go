@@ -64,76 +64,9 @@ func verificarArquivos(pasta string) []arqInfo {
 
 // ---------- modelo do banco ----------
 
-type Empresa struct {
-	ID        int      `json:"id,omitempty"` // id no Supabase
-	CNPJ      string   `json:"cnpj"`
-	CodCVM    string   `json:"cod_cvm"`
-	Nome      string   `json:"nome"`
-	NomeCurto string   `json:"nome_curto"`
-	Setor     string   `json:"setor"`
-	Tipo      string   `json:"tipo"`
-	Tickers   []string `json:"tickers"`
-	UltDFP    int      `json:"ult_dfp"`
-	UltTri    string   `json:"ult_tri"`
-	Ativa     bool     `json:"ativa"`
-	Arquivo   string   `json:"arquivo"`
-}
-
-type Conta struct {
-	Cod  string  `json:"c"`
-	Nome string  `json:"n"`
-	V    float64 `json:"v"`
-}
-
-type Tri struct {
-	Ano         int      `json:"ano"`
-	Tri         string   `json:"tri"`
-	Base        string   `json:"base"`
-	Receita     *float64 `json:"receita"`
-	LucroBruto  *float64 `json:"lucro_bruto"`
-	EBIT        *float64 `json:"ebit"`
-	DA          *float64 `json:"da"`
-	EBITDA      *float64 `json:"ebitda"`
-	ResFin      *float64 `json:"res_fin"`
-	Lucro       *float64 `json:"lucro"`
-	LucroCtrl   *float64 `json:"lucro_ctrl"`
-	MargemLiq   *float64 `json:"margem_liq"`
-	FCO         *float64 `json:"fco"`
-	Ativo       *float64 `json:"ativo"`
-	Caixa       *float64 `json:"caixa"`
-	DivBruta    *float64 `json:"div_bruta"`
-	DivLiq      *float64 `json:"div_liq"`
-	PL          *float64 `json:"pl"`
-	Receita12   *float64 `json:"receita_12m"`
-	EBITDA12    *float64 `json:"ebitda_12m"`
-	Lucro12     *float64 `json:"lucro_12m"`
-	ROE12       *float64 `json:"roe_12m"`
-	DivEBITDA12 *float64 `json:"div_ebitda_12m"`
-	FCO12       *float64 `json:"fco_12m"`
-}
-
 // valores em R$ milhões
-type EmpData struct {
-	CNPJ    string                        `json:"cnpj"`
-	DRE     map[string]map[string]float64 `json:"dre"`
-	BP      map[string]map[string]float64 `json:"bp"`
-	DFC     map[string][]Conta            `json:"dfc"`
-	NomesDR map[string]map[string]string  `json:"nomes_dre"` // ano -> código -> nome
-	NomesBP map[string]map[string]string  `json:"nomes_bp"`
-	BaseAno map[string]string             `json:"base_ano"`
-	Tri     []Tri                         `json:"tri"`
-	Capital map[string]Capital            `json:"capital"` // data de referência -> ações
-}
 
 // composição do capital (quantidade de ações, como informada à CVM)
-type Capital struct {
-	ON     float64 `json:"on"`
-	PN     float64 `json:"pn"`
-	Total  float64 `json:"total"`
-	TesON  float64 `json:"tes_on"`
-	TesPN  float64 `json:"tes_pn"`
-	TesTot float64 `json:"tes_total"`
-}
 
 type MetaBanco struct {
 	ImportadoEm string    `json:"importado_em"`
@@ -163,38 +96,8 @@ type Banco struct {
 }
 
 // Ult12: números dos 12 meses até o último trimestre, para a lista de empresas
-type Ult12 struct {
-	Tri       string   `json:"tri"`
-	Receita   *float64 `json:"receita_12m"`
-	Lucro     *float64 `json:"lucro_12m"`
-	MLiq      *float64 `json:"margem_liq_12m"`
-	ROE       *float64 `json:"roe_12m"`
-	DivEBITDA *float64 `json:"div_ebitda_12m"`
-	PL        *float64 `json:"-"`
-	LucroCtrl *float64 `json:"-"` // dos controladores, 4 trimestres (como o P/L da ficha)
-}
 
 // tris: trimestres da empresa em ordem de data
-func ult12De(tris []Tri) Ult12 {
-	t := tris[len(tris)-1]
-	u := Ult12{Tri: t.Tri, Receita: t.Receita12, Lucro: t.Lucro12, MLiq: div(t.Lucro12, t.Receita12), ROE: t.ROE12, DivEBITDA: t.DivEBITDA12, PL: t.PL}
-	u.LucroCtrl = u.Lucro
-	if len(tris) >= 4 {
-		soma := 0.0
-		for _, x := range tris[len(tris)-4:] {
-			if x.LucroCtrl == nil {
-				return u
-			}
-			soma += *x.LucroCtrl
-		}
-		u.LucroCtrl = fp(soma)
-	}
-	// com patrimônio negativo (no fim ou na média), prejuízo vira ROE positivo
-	if (t.PL != nil && *t.PL <= 0) || (u.ROE != nil && *u.ROE > 0 && t.Lucro12 != nil && *t.Lucro12 < 0) {
-		u.ROE = nil
-	}
-	return u
-}
 
 // Ultimos12 lê o último trimestre de cada empresa uma vez por banco importado.
 func (b *Banco) Ultimos12() map[string]Ult12 {
@@ -388,20 +291,6 @@ func (c *contador) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func num(s string) *float64 {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil
-	}
-	s = strings.ReplaceAll(s, ".", "")
-	s = strings.Replace(s, ",", ".", 1)
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return nil
-	}
-	return &v
-}
-
 // números no formato "1234,56" (sem separador de milhar)
 func numSimples(s string) *float64 {
 	s = strings.TrimSpace(s)
@@ -414,8 +303,6 @@ func numSimples(s string) *float64 {
 	}
 	return &v
 }
-
-func profundidade(cod string) int { return strings.Count(cod, ".") + 1 }
 
 type lerFn func(get func(string) string) error
 
@@ -820,26 +707,6 @@ func contem(xs []string, s string) bool {
 	return false
 }
 
-func triKey(ano int, tri string) int {
-	q := 0
-	if len(tri) > 0 {
-		q = int(tri[0] - '0')
-	}
-	return ano*10 + q
-}
-
-func codLess(a, b string) bool {
-	pa, pb := strings.Split(a, "."), strings.Split(b, ".")
-	for i := 0; i < len(pa) && i < len(pb); i++ {
-		x, _ := strconv.Atoi(pa[i])
-		y, _ := strconv.Atoi(pb[i])
-		if x != y {
-			return x < y
-		}
-	}
-	return len(pa) < len(pb)
-}
-
 type zipsInfo struct {
 	Pasta  string `json:"pasta"`
 	Existe bool   `json:"existe"`
@@ -941,13 +808,4 @@ func lerCapitalZip(caminho string, emps map[string]*acum) error {
 		rc.Close()
 	}
 	return nil
-}
-
-func temValores(m map[string]float64, cods ...string) bool {
-	for _, c := range cods {
-		if v, ok := m[c]; ok && v != 0 {
-			return true
-		}
-	}
-	return false
 }

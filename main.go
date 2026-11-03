@@ -7,6 +7,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fichab3/nucleo"
 	"flag"
 	"fmt"
 	"io"
@@ -136,6 +137,7 @@ func main() {
 		appDir = expand(*pastaApp)
 	}
 	_ = os.MkdirAll(appDir, 0755)
+	nucleo.DirCacheLegado = filepath.Join(appDir, "fichas", "cache")
 	cfgPath = filepath.Join(appDir, "config.json")
 	if lf, err := os.OpenFile(filepath.Join(appDir, "fichab3.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
 		log.SetOutput(io.MultiWriter(lf, os.Stderr))

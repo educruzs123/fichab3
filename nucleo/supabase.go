@@ -1,4 +1,4 @@
-package main
+package nucleo
 
 // Fonte "Supabase": lê empresas, demonstrações e trimestres do banco fichas-b3
 // pela API REST (PostgREST), com a chave publicável (somente leitura).

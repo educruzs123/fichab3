@@ -1,4 +1,4 @@
-package main
+package nucleo
 
 import (
 	"encoding/json"
@@ -101,14 +101,16 @@ func lerCache(p string) (map[string]any, time.Time, bool) {
 	return m, t, true
 }
 
+// DirCacheLegado: pasta do cache antigo da Alpha Vantage; o app local a define na inicialização.
+var DirCacheLegado string
+
 // Série mensal ajustada (fechamento, fechamento ajustado por proventos, proventos)
 func ObterCotacoes(ticker, chave, cacheDir string, forcar bool) (*Serie, error) {
 	_ = os.MkdirAll(cacheDir, 0755)
 	cp := filepath.Join(cacheDir, "av_"+ticker+".json")
-	legado := filepath.Join(appDir, "fichas", "cache", "av_"+ticker+".json")
 	m, t, ok := lerCache(cp)
-	if !ok {
-		m, t, ok = lerCache(legado)
+	if !ok && DirCacheLegado != "" { // cache da versão antiga do app (só no Mac)
+		m, t, ok = lerCache(filepath.Join(DirCacheLegado, "av_"+ticker+".json"))
 	}
 	fresco := ok && time.Since(t) < 12*time.Hour
 	if ok && fresco && !forcar {
