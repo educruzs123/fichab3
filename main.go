@@ -174,7 +174,7 @@ func main() {
 	static := http.FileServer(http.FS(sub))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
-		if p == "/" || p == "/ficha" || p == "/itr" || p == "/config" {
+		if p == "/" || p == "/ficha" || p == "/itr" || p == "/config" || p == "/empresas" {
 			w.Header().Set("Cache-Control", "no-store")
 			http.ServeFileFS(w, r, sub, "index.html")
 			return

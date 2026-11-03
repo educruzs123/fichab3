@@ -81,6 +81,7 @@
   document.querySelectorAll('[data-nav]').forEach(a => { if ((rota === '/config' && a.dataset.nav === 'config') || (rota !== '/config' && a.dataset.nav === 'inicio' && rota === '/')) a.classList.add('ativo'); });
   if (rota === '/config') paginaConfig();
   else if (rota === '/ficha') paginaFicha(new URLSearchParams(location.search).get('t') || '');
+  else if (rota === '/empresas') paginaEmpresas();
   else if (rota === '/itr') paginaITR(new URLSearchParams(location.search).get('t') || '', new URLSearchParams(location.search).get('dt') || '');
   else paginaInicio(new URLSearchParams(location.search).get('q') || '');
 
@@ -101,6 +102,7 @@
       }
       const sm = st.supabase.meta || {};
       app.appendChild(h('p', { class: 'sub' }, `${sm.n_empresas_com_ticker} empresas com ticker · demonstrações anuais ${sm.ano_min}–${sm.ano_max} · trimestres até ${sm.ult_tri} · banco Supabase atualizado em ${new Date(sm.importado_em).toLocaleString('pt-BR')}`));
+      app.appendChild(h('p', { class: 'sub', style: 'margin:-10px 0 18px' }, h('a', { href: '/empresas' }, `Ver as ${sm.n_empresas_com_ticker} empresas cadastradas no banco →`)));
     } else if (!st.banco_pronto) {
       app.appendChild(h('p', { class: 'lede' }, 'Para começar, monte o banco local com os dados da CVM. Depois, basta atualizar a cada temporada de resultados.'));
       app.appendChild(aviso('info', h('b', null, 'Banco ainda não importado. '), 'Abra a ', h('a', { href: '/config' }, 'configuração'), ' e clique em “Baixar da CVM e atualizar”.'));
@@ -199,6 +201,26 @@
     });
     const legenda = h('div', { class: 'leg' }, FAIXAS_VAR.map(f => h('span', null, h('i', { style: `background:${f.cor}` }), f.rotulo)));
     return h('div', null, h('div', { class: 'graf' }, s), legenda);
+  }
+
+  // ---------- empresas cadastradas no banco ----------
+  async function paginaEmpresas() {
+    document.title = 'Empresas cadastradas — FichaB3Completa';
+    app.textContent = '';
+    app.appendChild(h('p', { class: 'kicker' }, 'Banco de dados'));
+    app.appendChild(h('h1', null, 'Empresas cadastradas'));
+    let l;
+    try { l = await empresas(); } catch (e) { app.appendChild(aviso('erro', e.message)); return; }
+    const tk = e => e.ticker || e.tickers[0];
+    app.appendChild(h('p', { class: 'sub' }, `${l.length} empresas com ticker no banco · `, h('a', { href: '/' }, '← voltar ao início')));
+    app.appendChild(h('div', { class: 'tabela-wrap', style: 'max-height:none' }, h('table', { class: 't' },
+      h('thead', null, h('tr', null, ['Ticker', 'Empresa', 'Setor', 'Tickers', 'Ativa na CVM'].map(c => h('th', null, c)))),
+      h('tbody', null, l.slice().sort((a, b) => tk(a).localeCompare(tk(b))).map(e => h('tr', null,
+        h('td', null, h('a', { href: '/ficha?t=' + encodeURIComponent(tk(e)) }, tk(e))),
+        h('td', { style: 'white-space:normal' }, e.nome),
+        h('td', { style: 'white-space:normal' }, e.setor || '—'),
+        h('td', null, e.tickers.join(' ')),
+        h('td', null, e.ativa ? 'sim' : 'não')))))));
   }
 
   // últimos fatos relevantes, do conjunto IPE dos dados abertos da CVM

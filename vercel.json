@@ -1,7 +1,20 @@
 {
   "rewrites": [
-    { "source": "/ficha", "destination": "/index.html" },
-    { "source": "/itr", "destination": "/index.html" },
-    { "source": "/config", "destination": "/index.html" }
+    {
+      "source": "/ficha",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/itr",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/config",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/empresas",
+      "destination": "/index.html"
+    }
   ]
 }
