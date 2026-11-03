@@ -112,59 +112,7 @@
     const rec = store.get('recentes', []);
     if (rec.length) app.appendChild(h('p', { class: 'acoes', style: 'margin:0 0 14px' }, h('span', { class: 'status', style: 'align-self:center' }, 'Recentes:'), rec.slice(0, 10).map(t => h('a', { class: 'chip', href: '/ficha?t=' + encodeURIComponent(t) }, t))));
     if (st.fonte === 'supabase') app.appendChild(painelTop20());
-    app.appendChild(h('h2', { style: 'margin:28px 0 10px' }, 'Todas as empresas'));
-    // colunas: título, valor para ordenar, célula, classe (n = número; s0/s1/s2 somem em telas cada vez mais estreitas)
-    const triN = t => { const m = /^(\d)T(\d\d)$/.exec(t || ''); return m ? +m[2] * 10 + +m[1] : null; };
-    const num = (k, fmt, neg) => [e => e[k], e => h('td', { class: 'n' + (neg && e[k] < 0 ? ' down' : '') }, fmt(e[k]))];
-    const cols = [
-      ['Ticker', e => e.ticker, e => h('td', null, h('a', { href: '/ficha?t=' + encodeURIComponent(e.ticker) }, e.ticker), e.tickers.length > 1 ? h('span', { class: 'status' }, ' ' + e.tickers.slice(1).join(' ')) : null)],
-      ['Empresa', e => e.nome, e => h('td', null, e.nome)],
-      ['Setor', e => e.setor, e => h('td', null, e.setor || '—'), 's1'],
-      ['Cotação', e => e.cotacao, e => h('td', { title: e.var_12m != null ? 'Em 12 meses: ' + pctS(e.var_12m) : null }, rs(e.cotacao)), 'n s2'],
-      ['P/L', e => e.p_l, e => h('td', null, xv(e.p_l)), 'n'],
-      ['DY 12m', ...num('dy_12m', pct), 'n s2'],
-      ['Mg. líq.', ...num('margem_liq_12m', pct, true), 'n s1'],
-      ['ROE', ...num('roe_12m', pct, true), 'n'],
-      ['Receita 12m', ...num('receita_12m', mi), 'n s0'],
-      ['Lucro 12m', ...num('lucro_12m', mi, true), 'n s0'],
-      ['Dív. líq./EBITDA', ...num('div_ebitda_12m', xv), 'n s1'],
-      ['Dados até', e => triN(e.tri || e.ult_tri), e => h('td', null, e.tri || e.ult_tri || '—'), 'n s0'],
-    ];
-    let ordem = { i: 0, dir: 1 };
-    const cab = h('tr');
-    const corpo = h('tbody');
-    const cont = h('p', { class: 'status' });
-    app.appendChild(h('div', { class: 'tabela-wrap', style: 'max-height:none' }, h('table', { class: 't lista' }, h('thead', null, cab), corpo)));
-    const so = h('label', { class: 'status', style: 'display:flex;gap:6px;align-items:center;margin:10px 0 2px' }, h('input', { type: 'checkbox', checked: true }), 'Só companhias ativas na CVM');
-    app.appendChild(so);
-    app.appendChild(cont);
-    app.appendChild(h('p', { class: 'desc' }, 'Números dos 12 meses até o último trimestre informado à CVM; cotação, P/L e DY pelas cotações mensais do Supabase (P/L sobre o lucro dos controladores). Clique no título de uma coluna para ordenar.'));
     if (st.fonte === 'supabase') { logCVM(); logCotacoes(); }
-    let es = [];
-    try { es = await empresas(); } catch (e) { cont.textContent = e.message; return; }
-    const norm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    function cabecalho() {
-      cab.textContent = '';
-      cols.forEach((c, i) => cab.appendChild(h('th', { class: c[3] || '', 'aria-sort': ordem.i === i ? (ordem.dir > 0 ? 'ascending' : 'descending') : 'none' },
-        h('button', { class: 'ordenar', type: 'button', onclick: () => { ordem = { i, dir: ordem.i === i ? -ordem.dir : (c[3] || '').includes('n') ? -1 : 1 }; cabecalho(); desenhar(); } },
-          c[0], ordem.i === i ? (ordem.dir > 0 ? ' ▲' : ' ▼') : ''))));
-    }
-    function desenhar() {
-      const q = norm(q0.trim()), soAt = so.querySelector('input').checked;
-      const lista = es.filter(e => (!soAt || e.ativa) && (!q || norm(e.tickers.join(' ') + ' ' + e.nome + ' ' + e.setor).includes(q)));
-      const chave = cols[ordem.i][1];
-      // vazios sempre no fim, nos dois sentidos
-      lista.sort((a, b) => { const x = chave(a), y = chave(b), vx = x == null || x === '', vy = y == null || y === ''; if (vx || vy) return vx - vy; return (typeof x === 'string' ? x.localeCompare(y, 'pt-BR') : x - y) * ordem.dir; });
-      corpo.textContent = '';
-      lista.slice(0, 600).forEach(e => {
-        corpo.appendChild(h('tr', { onclick: () => { location.href = '/ficha?t=' + encodeURIComponent(e.ticker); } }, cols.map(c => { const td = c[2](e); if (c[3]) td.classList.add(...c[3].split(' ')); return td; })));
-      });
-      cont.textContent = lista.length + (lista.length === 1 ? ' empresa' : ' empresas') + (lista.length > 600 ? ' (mostrando 600; refine a busca)' : '');
-      if (q) cont.append(` para “${q0.trim()}” · `, h('a', { href: '/' }, 'ver todas'));
-    }
-    cabecalho();
-    so.querySelector('input').addEventListener('change', desenhar);
-    desenhar();
   }
 
   // ---------- início: as 20 maiores (esquerda) e o mapa de variação do dia (direita) ----------
