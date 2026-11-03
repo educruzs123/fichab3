@@ -102,7 +102,7 @@
       }
       const sm = st.supabase.meta || {};
       app.appendChild(h('p', { class: 'sub' }, `${sm.n_empresas_com_ticker} empresas com ticker · demonstrações anuais ${sm.ano_min}–${sm.ano_max} · trimestres até ${sm.ult_tri} · banco Supabase atualizado em ${new Date(sm.importado_em).toLocaleString('pt-BR')}`));
-      app.appendChild(h('p', { class: 'sub', style: 'margin:-10px 0 18px' }, h('a', { href: '/empresas' }, `Ver as ${sm.n_empresas_com_ticker} empresas cadastradas no banco →`)));
+      app.appendChild(h('div', { class: 'card destaque', style: 'margin:0 0 18px;padding:12px 18px' }, h('a', { href: '/empresas', style: 'font-weight:600' }, `Ver as ${sm.n_empresas_com_ticker} empresas cadastradas no banco →`)));
     } else if (!st.banco_pronto) {
       app.appendChild(h('p', { class: 'lede' }, 'Para começar, monte o banco local com os dados da CVM. Depois, basta atualizar a cada temporada de resultados.'));
       app.appendChild(aviso('info', h('b', null, 'Banco ainda não importado. '), 'Abra a ', h('a', { href: '/config' }, 'configuração'), ' e clique em “Baixar da CVM e atualizar”.'));
