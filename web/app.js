@@ -223,7 +223,7 @@
         h('td', null, e.ativa ? 'sim' : 'não')))))));
   }
 
-  // últimos fatos relevantes, do conjunto IPE dos dados abertos da CVM
+  // últimos fatos relevantes: conjunto IPE dos dados abertos da CVM, completado pelo RAD
   function fatosRelevantes() {
     const resumo = h('p', { class: 'status', style: 'margin:0 0 6px' }, 'Carregando…');
     const corpo = h('div');
@@ -233,7 +233,7 @@
       const tickers = {};
       try { (await empresas()).forEach(e => { tickers[e.cnpj] = e.ticker; }); } catch (e) { /* a lista funciona sem os links das fichas */ }
       resumo.textContent = `${l.length} mais recentes · último entregue em ${dataBR(l[0].data)}`;
-      corpo.appendChild(h('p', { class: 'desc' }, 'PDFs entregues à CVM. O arquivo de dados abertos é atualizado cerca de uma vez por semana, então os fatos dos últimos dias podem ainda não aparecer.'));
+      corpo.appendChild(h('p', { class: 'desc' }, 'PDFs entregues à CVM. Fonte: dados abertos da CVM, completados pela consulta do RAD nos dias que o arquivo ainda não cobre.'));
       corpo.appendChild(h('div', { class: 'tabela-wrap', style: 'max-height:360px' }, h('table', { class: 't' },
         h('thead', null, h('tr', null, ['Entregue em', 'Empresa', 'Assunto'].map(c => h('th', null, c)))),
         h('tbody', null, l.map(x => h('tr', null,
