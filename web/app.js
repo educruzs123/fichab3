@@ -362,8 +362,9 @@
     // cabeçalho
     app.appendChild(h('p', { class: 'kicker' }, [f.setor, f.tipo, f.ativa ? null : 'cancelada na CVM'].filter(Boolean).join(' · ')));
     app.appendChild(h('h1', null, (f.nome_curto || f.empresa) + ' · ' + f.ticker));
+    const dfpRot = h('span', null, 'DFP até ' + f.ult_dfp); // vira link se houver o PDF da DFP (card dos demonstrativos)
     app.appendChild(h('p', { class: 'sub' }, h('span', { class: 'chips' }, f.tickers.map(x => h('a', { class: x === f.ticker ? 'chip' : 'chip cinza', href: '/ficha?t=' + x }, x))), '  ',
-      `${f.empresa} · CNPJ ${f.cnpj} · DFP até ${f.ult_dfp} · trimestres até ${f.ult_tri || '—'}` + (at.cotacao_data ? ` · cotação de ${dataBR(at.cotacao_data)}` + (at.cotacao_hora ? ` às ${at.cotacao_hora} (Yahoo Finance)` : '') : '')));
+      `${f.empresa} · CNPJ ${f.cnpj} · `, dfpRot, ` · trimestres até ${f.ult_tri || '—'}` + (at.cotacao_data ? ` · cotação de ${dataBR(at.cotacao_data)}` + (at.cotacao_hora ? ` às ${at.cotacao_hora} (Yahoo Finance)` : '') : '')));
     const barra = h('div', { class: 'acoes noprint', style: 'margin:-6px 0 18px' },
       h('button', { class: 'btn', onclick: () => paginaFicha(f.ticker, true) }, 'Atualizar cotação'),
       h('button', { class: 'btn', onclick: () => baixarCSV(f) }, 'Baixar tabela (CSV)'),
@@ -532,8 +533,11 @@
     Promise.all(f.tickers.map(t => api('/api/demonstrativos?t=' + encodeURIComponent(t)))).then(ls => {
       const l = ls.flat().filter((a, i, v) => v.findIndex(b => b.nome === a.nome) === i);
       if (!l.length) { cDem.remove(); return; }
-      // TIM_DF_2T26.pdf → 2T26, do mais recente para o mais antigo
-      const per = a => { const m = /([1-4])T(\d\d)/.exec(a.nome); return m ? { rot: m[1] + 'T' + m[2], ord: +m[2] * 10 + +m[1] } : { rot: a.nome.replace(/\.pdf$/, ''), ord: 0 }; };
+      const dfp = l.find(a => a.nome.endsWith('_DFP_' + f.ult_dfp + '.pdf'));
+      if (dfp) dfpRot.replaceChildren(h('a', { href: dfp.url, target: '_blank', rel: 'noopener', title: 'PDF da DFP ' + f.ult_dfp + ' entregue no RAD da CVM' }, 'DFP até ' + f.ult_dfp));
+      // TIM_DF_2T26.pdf → 2T26 e TIM_DFP_2025.pdf → DFP 2025, do mais recente para o mais antigo
+      const per = a => { const d = /_DFP_(\d{4})\.pdf$/.exec(a.nome); if (d) return { rot: 'DFP ' + d[1], ord: (+d[1] % 100) * 10 + 5 };
+        const m = /([1-4])T(\d\d)/.exec(a.nome); return m ? { rot: m[1] + 'T' + m[2], ord: +m[2] * 10 + +m[1] } : { rot: a.nome.replace(/\.pdf$/, ''), ord: 0 }; };
       linksDem.append(...l.map(a => ({ ...a, ...per(a) })).sort((a, b) => b.ord - a.ord).map(a => h('a', { class: 'chip', href: a.url, target: '_blank', rel: 'noopener', title: a.nome + ' · ' + N1.format(a.tamanho / 1e6) + ' MB' }, 'PDF ' + a.rot)));
     }).catch(() => cDem.remove());
 
