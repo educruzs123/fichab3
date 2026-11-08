@@ -28,7 +28,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	serie, avErr := s.Cotacoes(t, false)
 	ult := nucleo.UltimaCotacao(t, false)
 	serie = nucleo.ComUltimaCotacao(serie, ult)
-	f := nucleo.MontarFicha(e, d, t, serie)
+	// a outra classe (ON↔PN), com seu próprio preço, para o valor de mercado
+	var outra *nucleo.Serie
+	if o := nucleo.TickerOposto(e.Tickers, t); o != "" {
+		if s2, err := s.Cotacoes(o, false); err == nil && s2 != nil {
+			outra = nucleo.ComUltimaCotacao(s2, nucleo.UltimaCotacao(o, false))
+		}
+	}
+	f := nucleo.MontarFicha(e, d, t, serie, outra)
 	if ult != nil && f.Atual["cotacao_data"] == ult.Data {
 		f.Atual["cotacao_hora"] = ult.Hora
 		if ult.Anterior > 0 {

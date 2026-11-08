@@ -52,4 +52,6 @@ var (
 	norm             = nucleo.Norm
 	div              = nucleo.Div
 	fatorEntre       = nucleo.FatorEntre
+	tickerOposto     = nucleo.TickerOposto
+	vmDasClasses     = nucleo.VmDasClasses
 )
