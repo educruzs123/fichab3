@@ -28,7 +28,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.14.0"
+const versao = "1.17.0"
 
 var (
 	appDir  string
@@ -189,6 +189,7 @@ func main() {
 	mux.HandleFunc("/api/empresas", apiEmpresas)
 	mux.HandleFunc("/api/log-cvm", apiLogCVM)
 	mux.HandleFunc("/api/log-cotacoes", apiLogCotacoes)
+	mux.HandleFunc("/api/fatos-relevantes", apiFatosRelevantes)
 	mux.HandleFunc("/api/cotacoes-diarias", apiCotacoesDiarias)
 	mux.HandleFunc("/api/demonstrativos", apiDemonstrativos)
 	mux.HandleFunc("/demonstrativos/", servirDemonstrativo)
@@ -530,16 +531,29 @@ var (
 	reArquivoPDF  = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.pdf$`)
 )
 
-// /api/demonstrativos?t=TIMS3 lista os PDFs de ~/FichaB3/demonstrativos/TIMS3
+// /api/demonstrativos?t=TIMS3 lista os PDFs do Supabase e os de ~/FichaB3/demonstrativos/TIMS3 que não estejam lá
 func apiDemonstrativos(w http.ResponseWriter, r *http.Request) {
 	t := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("t")))
 	out := []map[string]any{}
-	if reTickerPasta.MatchString(t) {
-		itens, _ := os.ReadDir(filepath.Join(appDir, "demonstrativos", t))
-		for _, it := range itens {
-			if info, err := it.Info(); err == nil && info.Mode().IsRegular() && reArquivoPDF.MatchString(it.Name()) {
-				out = append(out, map[string]any{"nome": it.Name(), "tamanho": info.Size()})
-			}
+	if !reTickerPasta.MatchString(t) {
+		writeJSON(w, out)
+		return
+	}
+	noBanco := map[string]bool{}
+	if usaSupa() {
+		l, err := fonteSupa().Demonstrativos(t)
+		if err != nil {
+			log.Printf("demonstrativos de %s no Supabase: %v", t, err)
+		}
+		for _, a := range l {
+			noBanco[a["nome"].(string)] = true
+			out = append(out, a)
+		}
+	}
+	itens, _ := os.ReadDir(filepath.Join(appDir, "demonstrativos", t))
+	for _, it := range itens {
+		if info, err := it.Info(); err == nil && info.Mode().IsRegular() && reArquivoPDF.MatchString(it.Name()) && !noBanco[it.Name()] {
+			out = append(out, map[string]any{"nome": it.Name(), "tamanho": info.Size(), "url": "/demonstrativos/" + t + "/" + it.Name()})
 		}
 	}
 	writeJSON(w, out)
@@ -561,10 +575,22 @@ func apiCotacoesDiarias(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, 409, "as cotações diárias só existem com a fonte Supabase")
 		return
 	}
-	l, err := fonteSupa().CotacoesDiarias(strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("t"))))
+	t := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("t")))
+	l, err := fonteSupa().CotacoesDiarias(t)
 	if err != nil {
 		jsonErr(w, 502, err.Error())
 		return
+	}
+	// último pregão do Yahoo, se o banco ainda não o tiver
+	if u := UltimaCotacao(t, false); u != nil && len(l) > 0 {
+		var ult struct {
+			Data string `json:"data"`
+		}
+		if json.Unmarshal(l[len(l)-1], &ult) == nil && u.Data > ult.Data {
+			if b, err := json.Marshal(map[string]any{"data": u.Data, "fechamento": u.Preco}); err == nil {
+				l = append(l, b)
+			}
+		}
 	}
 	writeJSON(w, l)
 }
@@ -575,6 +601,15 @@ func apiLogCotacoes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l, err := fonteSupa().LogCotacoes()
+	if err != nil {
+		jsonErr(w, 502, err.Error())
+		return
+	}
+	writeJSON(w, l)
+}
+
+func apiFatosRelevantes(w http.ResponseWriter, r *http.Request) {
+	l, err := UltimosFatos()
 	if err != nil {
 		jsonErr(w, 502, err.Error())
 		return
@@ -662,6 +697,10 @@ func apiEmpresas(w http.ResponseWriter, r *http.Request) {
 			// lucro mínimo de R$ 100 mil: perto de zero, o P/L explode sem significado
 			if a := acoes[e.ID]; a.Qt > 0 && temU && u.LucroCtrl != nil && *u.LucroCtrl >= 0.1 && u.PL != nil && *u.PL > 0 {
 				vm := m.Preco * a.Qt * fatorEntre(m.Splits, a.Data, "9999") / acoesPorUnit(t) / 1e6 // R$ milhões, na base de ações de hoje
+				// ON e PN com preços próprios, quando a empresa tem as duas classes na lista
+				if vc, ok := vmDasClasses(e.Tickers, merc, a); ok {
+					vm = vc
+				}
 				// a CVM às vezes informa as ações em milhares: valor de mercado 1000× menor que o normal
 				if vm / *u.PL < 0.02 {
 					vm *= 1000
@@ -726,7 +765,26 @@ func apiFicha(w http.ResponseWriter, r *http.Request) {
 	if serie == nil {
 		serie, avErr = ObterCotacoes(t, chave, filepath.Join(appDir, "cache"), forcar)
 	}
-	f := MontarFicha(e, d, t, serie)
+	ult := UltimaCotacao(t, forcar)
+	serie = comUltimaCotacao(serie, ult)
+	// a outra classe (ON↔PN), com seu próprio preço, para o valor de mercado
+	var outra *Serie
+	if o := tickerOposto(e.Tickers, t); o != "" && usaSupa() {
+		if s, err := fonteSupa().Cotacoes(o, forcar); err == nil && s != nil {
+			outra = comUltimaCotacao(s, UltimaCotacao(o, forcar))
+		} else if err != nil {
+			log.Printf("cotações da outra classe %s: %v", o, err)
+		}
+	}
+	f := MontarFicha(e, d, t, serie, outra)
+	if ult != nil && f.Atual["cotacao_data"] == ult.Data {
+		f.Atual["cotacao_hora"] = ult.Hora
+		if ult.Anterior > 0 {
+			f.Atual["var_dia"] = ult.Preco/ult.Anterior - 1
+			f.Atual["cotacao_anterior"] = ult.Anterior
+		}
+		f.FonteCot += "; última cotação: Yahoo Finance"
+	}
 	if usaSupa() {
 		f.Fonte = "supabase"
 	} else {

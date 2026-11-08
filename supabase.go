@@ -448,9 +448,12 @@ type Mercado struct {
 }
 
 // Acoes: ações em circulação informadas à CVM e a data da informação
+// (Qt = total − tesouraria; ON e PN = cada classe, também sem tesouraria)
 type Acoes struct {
 	Qt   float64
 	Data string
+	ON   float64
+	PN   float64
 }
 
 // Último ano de cotações de todos os tickers e ações em circulação de cada empresa
@@ -517,16 +520,20 @@ func (s *Supa) Mercados(forcar bool) (map[string]Mercado, map[int]Acoes, error) 
 		Data      string  `json:"dt_refer"`
 		Total     float64 `json:"qt_total"`
 		Tes       float64 `json:"tes_total"`
+		ON        float64 `json:"qt_on"`
+		PN        float64 `json:"qt_pn"`
+		TesON     float64 `json:"tes_on"`
+		TesPN     float64 `json:"tes_pn"`
 	}
 	ini = time.Now().AddDate(-2, 0, 0).Format("2006-01-02")
-	caps, err := supaTodos[capt](s, "capital", url.Values{"select": {"empresa_id,dt_refer,qt_total,tes_total"}, "dt_refer": {"gte." + ini}, "order": {"empresa_id,dt_refer"}})
+	caps, err := supaTodos[capt](s, "capital", url.Values{"select": {"empresa_id,dt_refer,qt_total,tes_total,qt_on,qt_pn,tes_on,tes_pn"}, "dt_refer": {"gte." + ini}, "order": {"empresa_id,dt_refer"}})
 	if err != nil {
 		return nil, nil, err
 	}
 	acoes := map[int]Acoes{}
 	for _, c := range caps {
 		if c.Total > 0 {
-			acoes[c.EmpresaID] = Acoes{c.Total - c.Tes, c.Data} // ordenado por data: fica a última
+			acoes[c.EmpresaID] = Acoes{Qt: c.Total - c.Tes, Data: c.Data, ON: c.ON - c.TesON, PN: c.PN - c.TesPN} // ordenado por data: fica a última
 		}
 	}
 	s.mu.Lock()
@@ -621,4 +628,22 @@ func (s *Supa) ITR(e *Empresa, dt string) (dre, bp, dfc []ContaITR, base string,
 func (s *Supa) CotacoesDiarias(ticker string) ([]json.RawMessage, error) {
 	q := url.Values{"select": {"data,fechamento"}, "ticker": {"eq." + ticker}, "data": {"gte." + time.Now().AddDate(-5, 0, 0).Format("2006-01-02")}, "order": {"data"}}
 	return supaTodos[json.RawMessage](s, "cotacoes", q)
+}
+
+// PDFs do bucket público demonstrativos listados para o ticker (tabela public.demonstrativos).
+func (s *Supa) Demonstrativos(ticker string) ([]map[string]any, error) {
+	var l []struct {
+		Arquivo string `json:"arquivo"`
+		Tamanho int64  `json:"tamanho"`
+	}
+	q := url.Values{"select": {"arquivo,tamanho"}, "ticker": {"eq." + ticker}}
+	if _, err := s.get("demonstrativos", q, -1, &l); err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(l))
+	for _, a := range l {
+		out = append(out, map[string]any{"nome": a.Arquivo, "tamanho": a.Tamanho,
+			"url": s.URL + "/storage/v1/object/public/demonstrativos/" + url.PathEscape(ticker) + "/" + url.PathEscape(a.Arquivo)})
+	}
+	return out, nil
 }
