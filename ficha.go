@@ -179,7 +179,49 @@ func acoesPorUnit(ticker string) float64 {
 	return 1
 }
 
-func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
+// tickerDaClasse: o primeiro ticker da classe ("ON" ou "PN") entre os da empresa, ou "".
+func tickerDaClasse(tickers []string, classe string) string {
+	for _, t := range tickers {
+		if classeTicker(t) == classe {
+			return t
+		}
+	}
+	return ""
+}
+
+// tickerOposto: o ticker da outra classe (ON↔PN) da mesma empresa, ou "" (units e sem par).
+func tickerOposto(tickers []string, ticker string) string {
+	switch classeTicker(ticker) {
+	case "ON":
+		return tickerDaClasse(tickers, "PN")
+	case "PN":
+		return tickerDaClasse(tickers, "ON")
+	}
+	return ""
+}
+
+// vmClasses: valor de mercado em R$ milhões, com cada classe ao seu preço
+// (ações em unidades, preços em R$). Empresas com ON e PN não podem usar um preço só.
+func vmClasses(onQt, pOn, pnQt, pPn float64) float64 {
+	return (onQt*pOn + pnQt*pPn) / 1e6
+}
+
+// vmDasClasses: valor de mercado da lista (R$ mi) com o preço de cada classe.
+// false quando a empresa não tem as duas classes cotadas ou sem ações por classe.
+func vmDasClasses(tickers []string, merc map[string]Mercado, a Acoes) (float64, bool) {
+	to, tp := tickerDaClasse(tickers, "ON"), tickerDaClasse(tickers, "PN")
+	mo, okO := merc[to]
+	mp, okP := merc[tp]
+	if to == "" || tp == "" || !okO || !okP || a.ON <= 0 || a.PN <= 0 {
+		return 0, false
+	}
+	on := a.ON * fatorEntre(mo.Splits, a.Data, "9999")
+	pn := a.PN * fatorEntre(mp.Splits, a.Data, "9999")
+	return vmClasses(on, mo.Preco, pn, mp.Preco), true
+}
+
+// outra: série da outra classe (ON↔PN) da mesma empresa; com ela, o valor de mercado usa o preço de cada classe.
+func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie, outra *Serie) *Ficha {
 	f := &Ficha{Ticker: ticker, Tickers: e.Tickers, Empresa: e.Nome, NomeCurto: e.NomeCurto, CNPJ: e.CNPJ, CodCVM: e.CodCVM,
 		Setor: e.Setor, Tipo: e.Tipo, Financeira: strings.HasPrefix(strings.ToLower(e.Tipo), "financ"), Ativa: e.Ativa,
 		UltDFP: e.UltDFP, UltTri: e.UltTri, Classe: classeTicker(ticker), Atual: map[string]any{}, Contas: map[string]string{},
@@ -222,6 +264,35 @@ func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
 			}
 		}
 		return x
+	}
+	// preço de fim de ano da outra classe, com os splits dela (mesma regra de precoFimAno)
+	var outraSplits []Split
+	if outra != nil {
+		outraSplits = outra.Splits
+		if outraSplits == nil {
+			outraSplits = detectarSplits(outra.Pontos)
+		}
+	}
+	precoFimAnoOutra := func(ano int) (float64, bool) {
+		if outra == nil {
+			return 0, false
+		}
+		var best *Ponto
+		for i := range outra.Pontos {
+			if strings.HasPrefix(outra.Pontos[i].Data, strconv.Itoa(ano)+"-") {
+				best = &outra.Pontos[i]
+			}
+		}
+		if best == nil {
+			return 0, false
+		}
+		x := 1.0
+		for _, s := range outraSplits {
+			if s.Data > best.Data {
+				x *= s.Fator
+			}
+		}
+		return best.Close / x, true
 	}
 	precoFimAno := func(ano int) (float64, string, bool) {
 		var best *Ponto
@@ -518,10 +589,13 @@ func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
 		}
 	}
 	fonteAcoes := ""
+	acClasses := map[int][2]float64{} // ON e PN de cada ano (milhões, sem tesouraria), mesma escala de Acoes
 	for i := range rows {
 		r := &rows[i]
 		if c, dt, ok := capDe(r.Ano); ok {
 			r.Acoes = fp(c * escAno[r.Ano] / 1e6 * fatorApos(dt))
+			cc := d.Capital[dt]
+			acClasses[r.Ano] = [2]float64{(cc.ON - cc.TesON) * escAno[r.Ano] / 1e6 * fatorApos(dt), (cc.PN - cc.TesPN) * escAno[r.Ano] / 1e6 * fatorApos(dt)}
 			fonteAcoes = "capital"
 		} else if a := acoesDe(*r); a != nil {
 			r.Acoes = fp(*a * fatorApos(fmt.Sprintf("%d-03-31", r.Ano+1)))
@@ -601,6 +675,17 @@ func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
 			r.PrecoData = dt
 			if ac != nil {
 				vm := *ac * p // R$ mi
+				// ON e PN, cada uma ao seu preço de fim de ano
+				if pO, ok := precoFimAnoOutra(r.Ano); ok {
+					if cl, ok2 := acClasses[r.Ano]; ok2 {
+						switch classeTicker(ticker) {
+						case "ON":
+							vm = vmClasses(cl[0]*1e6, p, cl[1]*1e6, pO)
+						case "PN":
+							vm = vmClasses(cl[0]*1e6, pO, cl[1]*1e6, p)
+						}
+					}
+				}
 				r.VMbi = fp(vm / 1000)
 				if r.LucroCtrl != nil && *r.LucroCtrl != 0 {
 					r.PLx = fp(vm / *r.LucroCtrl)
@@ -714,6 +799,8 @@ func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
 		// ações hoje: composição do capital mais recente (ITR) ou a do último ano fechado
 		var acoesHoje *float64
 		var lucro12 *float64
+		var onH, pnH float64 // ações de cada classe, mesma escala de acoesHoje
+		temClasses := false
 		if m, ok := f.Atual["doze_meses"].(map[string]any); ok {
 			lucro12, _ = m["lucro_ctrl"].(*float64)
 		}
@@ -734,6 +821,9 @@ func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
 				}
 			}
 			acoesHoje = fp(v * e / 1e6 * fatorApos(ultCap) / acoesPorUnit(ticker))
+			onH = (c.ON - c.TesON) * e / 1e6 * fatorApos(ultCap)
+			pnH = (c.PN - c.TesPN) * e / 1e6 * fatorApos(ultCap)
+			temClasses = true
 			f.Atual["acoes_data"] = ultCap
 		}
 		for i := len(rows) - 1; i >= 0; i-- {
@@ -748,7 +838,19 @@ func MontarFicha(e *Empresa, d *EmpData, ticker string, serie *Serie) *Ficha {
 			}
 		}
 		if acoesHoje != nil {
-			vm := *acoesHoje * lp.Close
+			vm := *acoesHoje * lp.Close // R$ mi
+			// ON e PN com preços próprios (ex.: PETR3 e PETR4), em vez de um preço só
+			if outra != nil && len(outra.Pontos) > 0 && temClasses {
+				if pOutra := outra.Pontos[len(outra.Pontos)-1].Close; pOutra > 0 {
+					// onH e pnH estão em milhões de ações; vmClasses recebe unidades
+					switch classeTicker(ticker) {
+					case "ON":
+						vm = vmClasses(onH*1e6, lp.Close, pnH*1e6, pOutra)
+					case "PN":
+						vm = vmClasses(onH*1e6, pOutra, pnH*1e6, lp.Close)
+					}
+				}
+			}
 			f.Atual["acoes_mi"] = *acoesHoje
 			f.Atual["valor_mercado_bi"] = vm / 1000
 			if lucro12 != nil && math.Abs(*lucro12) >= 0.1 { // perto de zero, o P/L explode sem significado

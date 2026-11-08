@@ -448,9 +448,12 @@ type Mercado struct {
 }
 
 // Acoes: ações em circulação informadas à CVM e a data da informação
+// (Qt = total − tesouraria; ON e PN = cada classe, também sem tesouraria)
 type Acoes struct {
 	Qt   float64
 	Data string
+	ON   float64
+	PN   float64
 }
 
 // Último ano de cotações de todos os tickers e ações em circulação de cada empresa
@@ -517,16 +520,20 @@ func (s *Supa) Mercados(forcar bool) (map[string]Mercado, map[int]Acoes, error) 
 		Data      string  `json:"dt_refer"`
 		Total     float64 `json:"qt_total"`
 		Tes       float64 `json:"tes_total"`
+		ON        float64 `json:"qt_on"`
+		PN        float64 `json:"qt_pn"`
+		TesON     float64 `json:"tes_on"`
+		TesPN     float64 `json:"tes_pn"`
 	}
 	ini = time.Now().AddDate(-2, 0, 0).Format("2006-01-02")
-	caps, err := supaTodos[capt](s, "capital", url.Values{"select": {"empresa_id,dt_refer,qt_total,tes_total"}, "dt_refer": {"gte." + ini}, "order": {"empresa_id,dt_refer"}})
+	caps, err := supaTodos[capt](s, "capital", url.Values{"select": {"empresa_id,dt_refer,qt_total,tes_total,qt_on,qt_pn,tes_on,tes_pn"}, "dt_refer": {"gte." + ini}, "order": {"empresa_id,dt_refer"}})
 	if err != nil {
 		return nil, nil, err
 	}
 	acoes := map[int]Acoes{}
 	for _, c := range caps {
 		if c.Total > 0 {
-			acoes[c.EmpresaID] = Acoes{c.Total - c.Tes, c.Data} // ordenado por data: fica a última
+			acoes[c.EmpresaID] = Acoes{Qt: c.Total - c.Tes, Data: c.Data, ON: c.ON - c.TesON, PN: c.PN - c.TesPN} // ordenado por data: fica a última
 		}
 	}
 	s.mu.Lock()

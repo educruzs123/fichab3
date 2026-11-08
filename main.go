@@ -697,6 +697,10 @@ func apiEmpresas(w http.ResponseWriter, r *http.Request) {
 			// lucro mínimo de R$ 100 mil: perto de zero, o P/L explode sem significado
 			if a := acoes[e.ID]; a.Qt > 0 && temU && u.LucroCtrl != nil && *u.LucroCtrl >= 0.1 && u.PL != nil && *u.PL > 0 {
 				vm := m.Preco * a.Qt * fatorEntre(m.Splits, a.Data, "9999") / acoesPorUnit(t) / 1e6 // R$ milhões, na base de ações de hoje
+				// ON e PN com preços próprios, quando a empresa tem as duas classes na lista
+				if vc, ok := vmDasClasses(e.Tickers, merc, a); ok {
+					vm = vc
+				}
 				// a CVM às vezes informa as ações em milhares: valor de mercado 1000× menor que o normal
 				if vm / *u.PL < 0.02 {
 					vm *= 1000
@@ -763,7 +767,16 @@ func apiFicha(w http.ResponseWriter, r *http.Request) {
 	}
 	ult := UltimaCotacao(t, forcar)
 	serie = comUltimaCotacao(serie, ult)
-	f := MontarFicha(e, d, t, serie)
+	// a outra classe (ON↔PN), com seu próprio preço, para o valor de mercado
+	var outra *Serie
+	if o := tickerOposto(e.Tickers, t); o != "" && usaSupa() {
+		if s, err := fonteSupa().Cotacoes(o, forcar); err == nil && s != nil {
+			outra = comUltimaCotacao(s, UltimaCotacao(o, forcar))
+		} else if err != nil {
+			log.Printf("cotações da outra classe %s: %v", o, err)
+		}
+	}
+	f := MontarFicha(e, d, t, serie, outra)
 	if ult != nil && f.Atual["cotacao_data"] == ult.Data {
 		f.Atual["cotacao_hora"] = ult.Hora
 		if ult.Anterior > 0 {
