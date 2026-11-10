@@ -382,6 +382,40 @@ func (s *Supa) Dados(e *Empresa, forcar bool) (*EmpData, error) {
 	return d, nil
 }
 
+// Fechamento: os dois últimos pregões de um ticker, para a página Lista
+type Fechamento struct {
+	Data  string
+	Preco float64
+	Ant   float64 // 0 = sem pregão anterior na janela
+}
+
+type cotDia struct {
+	Ticker     string  `json:"ticker"`
+	Data       string  `json:"data"`
+	Fechamento float64 `json:"fechamento"`
+}
+
+// as linhas chegam em ordem de ticker e data: fica o último pregão, com o anterior ao lado
+func ultimosDois(cs []cotDia) map[string]Fechamento {
+	out := map[string]Fechamento{}
+	for _, c := range cs {
+		if c.Fechamento > 0 {
+			out[c.Ticker] = Fechamento{c.Data, c.Fechamento, out[c.Ticker].Preco}
+		}
+	}
+	return out
+}
+
+// Últimos dois fechamentos de todos os tickers (tabela cotacoes, diária); 15 dias cobrem feriados prolongados.
+func (s *Supa) Fechamentos() (map[string]Fechamento, error) {
+	ini := time.Now().AddDate(0, 0, -15).Format("2006-01-02")
+	cs, err := supaTodos[cotDia](s, "cotacoes", url.Values{"select": {"ticker,data,fechamento"}, "data": {"gte." + ini}, "order": {"ticker,data"}})
+	if err != nil {
+		return nil, err
+	}
+	return ultimosDois(cs), nil
+}
+
 // Cotações mensais do ticker (tabela cotacoes_mensais), guardadas por 30 minutos.
 // O banco traz fechamento e proventos já ajustados por desdobramentos e bonificações;
 // aqui eles voltam ao valor da época (como a Alpha Vantage entrega), e os eventos
@@ -621,4 +655,22 @@ func (s *Supa) ITR(e *Empresa, dt string) (dre, bp, dfc []ContaITR, base string,
 func (s *Supa) CotacoesDiarias(ticker string) ([]json.RawMessage, error) {
 	q := url.Values{"select": {"data,fechamento"}, "ticker": {"eq." + ticker}, "data": {"gte." + time.Now().AddDate(-5, 0, 0).Format("2006-01-02")}, "order": {"data"}}
 	return supaTodos[json.RawMessage](s, "cotacoes", q)
+}
+
+// PDFs do bucket público demonstrativos listados para o ticker (tabela public.demonstrativos).
+func (s *Supa) Demonstrativos(ticker string) ([]map[string]any, error) {
+	var l []struct {
+		Arquivo string `json:"arquivo"`
+		Tamanho int64  `json:"tamanho"`
+	}
+	q := url.Values{"select": {"arquivo,tamanho"}, "ticker": {"eq." + ticker}}
+	if _, err := s.get("demonstrativos", q, -1, &l); err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(l))
+	for _, a := range l {
+		out = append(out, map[string]any{"nome": a.Arquivo, "tamanho": a.Tamanho,
+			"url": s.URL + "/storage/v1/object/public/demonstrativos/" + url.PathEscape(ticker) + "/" + url.PathEscape(a.Arquivo)})
+	}
+	return out, nil
 }

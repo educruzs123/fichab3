@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -1010,4 +1011,99 @@ func calcularTrimestres(q *qstore) []Tri {
 		}
 	}
 	return out
+}
+
+// ---------- fatos relevantes (conjunto IPE dos dados abertos) ----------
+
+type FatoRelevante struct {
+	Empresa string `json:"empresa"`
+	CNPJ    string `json:"cnpj"`
+	Assunto string `json:"assunto"`
+	Data    string `json:"data"`
+	Link    string `json:"link"`
+}
+
+// lê os fatos relevantes de um zip do IPE, sem repetir protocolo
+func fatosDoZip(b []byte) ([]FatoRelevante, error) {
+	zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
+	if err != nil {
+		return nil, err
+	}
+	var fs []FatoRelevante
+	vistos := map[string]bool{}
+	for _, f := range zr.File {
+		err := lerCSVZip(f, func(get func(string) string, c []string) {
+			n := len(c)
+			// contado do fim: um ';' no assunto desloca as colunas seguintes
+			if n < 13 || get("Categoria") != "Fato Relevante" || vistos[c[n-3]] || !strings.HasPrefix(c[n-1], "https://") {
+				return
+			}
+			vistos[c[n-3]] = true
+			fs = append(fs, FatoRelevante{get("Nome_Companhia"), get("CNPJ_Companhia"), strings.Join(c[7:n-5], ";"), c[n-5], c[n-1]})
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return fs, nil
+}
+
+var (
+	fatosMu    sync.Mutex
+	fatosCache []FatoRelevante
+	fatosEm    time.Time
+)
+
+// os 20 mais recentes; a CVM publica o arquivo do ano, e em janeiro pode faltar o ano novo
+func baixarFatos() ([]FatoRelevante, error) {
+	var fs []FatoRelevante
+	ano := time.Now().Year()
+	for y := ano; y >= ano-1 && len(fs) < 20; y-- {
+		r, err := dlClient.Get(fmt.Sprintf("%sDOC/IPE/DADOS/ipe_cia_aberta_%d.zip", urlCVM, y))
+		if err != nil {
+			return nil, err
+		}
+		b, err := io.ReadAll(r.Body)
+		r.Body.Close()
+		if r.StatusCode == 404 && y == ano {
+			continue
+		}
+		if err != nil || r.StatusCode != 200 {
+			return nil, fmt.Errorf("CVM respondeu %s ao baixar os fatos relevantes", r.Status)
+		}
+		l, err := fatosDoZip(b)
+		if err != nil {
+			return nil, err
+		}
+		fs = append(fs, l...)
+	}
+	// a data não tem hora; no mesmo dia, o link com protocolo maior foi entregue depois
+	sort.SliceStable(fs, func(i, j int) bool {
+		if fs[i].Data != fs[j].Data {
+			return fs[i].Data > fs[j].Data
+		}
+		return fs[i].Link > fs[j].Link
+	})
+	if len(fs) > 20 {
+		fs = fs[:20]
+	}
+	return fs, nil
+}
+
+// guarda por 6 horas (a CVM atualiza o arquivo uma vez por semana); se o download falhar, usa a última lista
+func UltimosFatos() ([]FatoRelevante, error) {
+	fatosMu.Lock()
+	defer fatosMu.Unlock()
+	if fatosCache != nil && time.Since(fatosEm) < 6*time.Hour {
+		return fatosCache, nil
+	}
+	fs, err := baixarFatos()
+	if err != nil {
+		if fatosCache != nil {
+			return fatosCache, nil
+		}
+		return nil, err
+	}
+	fatosCache, fatosEm = fs, time.Now()
+	return fs, nil
 }
