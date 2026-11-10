@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -172,6 +173,95 @@ var (
 	ultCot   = map[string]*UltimaCot{}
 )
 
+// símbolo no Yahoo, já pronto para a URL: ações levam o sufixo da B3; índices (^BVSP) não
+func simboloYahoo(ticker string) string {
+	if strings.HasPrefix(ticker, "^") {
+		return url.PathEscape(ticker)
+	}
+	return url.PathEscape(ticker) + ".SA"
+}
+
+// PontoMes: fechamento ajustado (proventos e desdobramentos) do último pregão do mês
+type PontoMes struct {
+	Mes string  `json:"mes"` // AAAA-MM
+	V   float64 `json:"v"`
+}
+
+type histCache struct {
+	pts []PontoMes
+	em  time.Time
+}
+
+var (
+	histMu sync.Mutex
+	hist   = map[string]histCache{}
+)
+
+// lê a resposta do Yahoo (range=max, interval=1mo); o mês corrente vem repetido com a cotação do dia: fica a última
+func mensalYahoo(corpo []byte) ([]PontoMes, error) {
+	var j struct {
+		Chart struct {
+			Result []struct {
+				Tempo []int64 `json:"timestamp"`
+				Ind   struct {
+					Adj []struct {
+						V []*float64 `json:"adjclose"`
+					} `json:"adjclose"`
+				} `json:"indicators"`
+			} `json:"result"`
+		} `json:"chart"`
+	}
+	if err := json.Unmarshal(corpo, &j); err != nil || len(j.Chart.Result) == 0 || len(j.Chart.Result[0].Ind.Adj) == 0 {
+		return nil, errors.New("o Yahoo não tem histórico para esse código")
+	}
+	r := j.Chart.Result[0]
+	var out []PontoMes
+	for i, t := range r.Tempo {
+		if i >= len(r.Ind.Adj[0].V) || r.Ind.Adj[0].V[i] == nil || *r.Ind.Adj[0].V[i] <= 0 {
+			continue
+		}
+		p := PontoMes{time.Unix(t, 0).UTC().Format("2006-01"), *r.Ind.Adj[0].V[i]}
+		if n := len(out); n > 0 && out[n-1].Mes == p.Mes {
+			out[n-1] = p
+		} else {
+			out = append(out, p)
+		}
+	}
+	if len(out) < 2 {
+		return nil, errors.New("o Yahoo não tem histórico para esse código")
+	}
+	return out, nil
+}
+
+// Histórico mensal completo de um ticker ou índice no Yahoo, guardado por 1 hora.
+func HistoricoYahoo(ticker string) ([]PontoMes, error) {
+	histMu.Lock()
+	c, ok := hist[ticker]
+	histMu.Unlock()
+	if ok && time.Since(c.em) < time.Hour {
+		return c.pts, nil
+	}
+	req, _ := http.NewRequest("GET", "https://query1.finance.yahoo.com/v8/finance/chart/"+simboloYahoo(ticker)+"?range=max&interval=1mo", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	if err != nil {
+		return nil, errors.New("o Yahoo não respondeu")
+	}
+	defer resp.Body.Close()
+	corpo, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, errors.New("o Yahoo não respondeu")
+	}
+	pts, err := mensalYahoo(corpo)
+	if err != nil {
+		return nil, err
+	}
+	histMu.Lock()
+	hist[ticker] = histCache{pts, time.Now()}
+	histMu.Unlock()
+	return pts, nil
+}
+
 // nil se o Yahoo não responder ou não conhecer o ticker: a ficha segue com os dados do banco.
 func UltimaCotacao(ticker string, forcar bool) *UltimaCot {
 	ultCotMu.Lock()
@@ -184,7 +274,7 @@ func UltimaCotacao(ticker string, forcar bool) *UltimaCot {
 		return c
 	}
 	n := &UltimaCot{em: time.Now()}
-	req, _ := http.NewRequest("GET", "https://query1.finance.yahoo.com/v8/finance/chart/"+url.PathEscape(ticker)+".SA?range=1d&interval=1d", nil)
+	req, _ := http.NewRequest("GET", "https://query1.finance.yahoo.com/v8/finance/chart/"+simboloYahoo(ticker)+"?range=1d&interval=1d", nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	cli := &http.Client{Timeout: 5 * time.Second}
 	if resp, err := cli.Do(req); err == nil {

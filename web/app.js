@@ -78,12 +78,85 @@
 
   // ---------- roteador ----------
   const rota = location.pathname;
-  document.querySelectorAll('[data-nav]').forEach(a => { if ((rota === '/config' && a.dataset.nav === 'config') || (rota !== '/config' && a.dataset.nav === 'inicio' && rota === '/')) a.classList.add('ativo'); });
+  const nav = { '/': 'inicio', '/lista': 'lista', '/comparar': 'comparar', '/config': 'config' }[rota];
+  document.querySelectorAll('[data-nav]').forEach(a => { if (a.dataset.nav === nav) a.classList.add('ativo'); });
   if (rota === '/config') paginaConfig();
+  else if (rota === '/lista') paginaLista();
+  else if (rota === '/comparar') paginaComparar((new URLSearchParams(location.search).get('t') || '').trim().toUpperCase());
   else if (rota === '/ficha') paginaFicha(new URLSearchParams(location.search).get('t') || '');
   else if (rota === '/empresas') paginaEmpresas();
   else if (rota === '/itr') paginaITR(new URLSearchParams(location.search).get('t') || '', new URLSearchParams(location.search).get('dt') || '');
   else paginaInicio(new URLSearchParams(location.search).get('q') || '');
+
+  // ---------- lista do dia ----------
+  async function paginaLista() {
+    document.title = 'FichaB3Completa — lista';
+    app.textContent = '';
+    const sub = h('p', { class: 'sub' }, 'Carregando…');
+    const corpo = h('div', { class: 'card cotacoes' });
+    app.append(h('p', { class: 'kicker' }, 'Cotações'), h('h1', null, 'Lista'), sub, corpo);
+    const sinal = v => v > 0 ? '+' : v < 0 ? '−' : '';
+    async function carregar() {
+      let l;
+      try { l = await api('/api/lista-dia'); } catch (e) { sub.textContent = ''; corpo.replaceChildren(aviso('erro', e.message)); return; }
+      const ult = l.reduce((m, e) => e.data > m ? e.data : m, '');
+      sub.textContent = `${l.filter(e => !e.indice).length} ações · fechamento de ${dataBR(ult)} contra o pregão anterior · atualizado às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+      corpo.replaceChildren(...l.map(e => {
+        const d = e.ant ? e.preco - e.ant : null;
+        return h(e.indice ? 'div' : 'a', { class: 'linha', href: e.indice ? null : '/ficha?t=' + encodeURIComponent(e.ticker) }, // o índice não tem ficha
+          h('span', { class: 'logo', 'aria-hidden': 'true' }, e.ticker.slice(0, 2)),
+          h('span', { class: 'quem' }, h('b', null, e.ticker), h('small', null, e.nome)),
+          h('span', { class: 'num' }, h('b', null, N2.format(e.preco)),
+            h('small', { class: d ? cls(d) : '' }, d == null ? '—' : sinal(d) + N2.format(Math.abs(d)) + ' ' + pctS(d / e.ant, 2))));
+      }));
+    }
+    await carregar();
+    setInterval(carregar, 5 * 60 * 1000); // o banco recebe o pregão ao longo do dia
+  }
+
+  // ---------- comparação com o Ibovespa ----------
+  async function paginaComparar(t) {
+    document.title = 'FichaB3Completa — ' + (t ? t + ' x Ibovespa' : 'comparar');
+    app.textContent = '';
+    const inT = h('input', { type: 'text', value: t, placeholder: 'Código da ação (ex.: VALE3)', 'aria-label': 'Código da ação', autocapitalize: 'characters', spellcheck: 'false', style: 'max-width:260px' });
+    const form = h('form', { class: 'campo', style: 'margin:0 0 18px', onsubmit: ev => { ev.preventDefault(); const v = inT.value.trim().toUpperCase(); if (v) location.href = '/comparar?t=' + encodeURIComponent(v); } },
+      h('div', { class: 'linha' }, inT, h('button', { class: 'btn pri', type: 'submit' }, 'Comparar')));
+    app.append(h('p', { class: 'kicker' }, 'Retorno acumulado'), h('h1', null, t ? t + ' x Ibovespa' : 'Comparar com o Ibovespa'),
+      h('p', { class: 'sub' }, 'Digite o código de uma ação da B3 para comparar o retorno dela com o do índice.'), form);
+    if (!t) { inT.focus(); return; }
+    const espera = h('p', { class: 'carregando' }, 'Buscando o histórico no Yahoo…');
+    app.appendChild(espera);
+    let r;
+    try { r = await api('/api/comparar?t=' + encodeURIComponent(t)); } catch (e) { espera.replaceWith(aviso('erro', e.message)); return; }
+    espera.remove();
+    const pts = r.pontos.map(p => ({ d: new Date(p.mes + '-15T12:00:00'), mes: p.mes, a: p.acao, i: p.ibov }));
+    if (pts.length < 2) { app.appendChild(aviso('erro', 'Não há meses em comum entre ' + t + ' e o Ibovespa.')); return; }
+    const ultimo = pts[pts.length - 1];
+    let per = store.get('cmp_periodo', '5a');
+    const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Intervalo' });
+    const opts = [['1a', '1 ano'], ['3a', '3 anos'], ['5a', '5 anos'], ['10a', '10 anos'], ['tudo', 'Tudo']];
+    const btns = opts.map(([k, l]) => h('button', { type: 'button', 'aria-pressed': String(k === per), onclick: () => { per = k; store.set('cmp_periodo', k); desenhar(); } }, l));
+    btns.forEach(b => seg.appendChild(b));
+    const g = h('div', { class: 'graf' }), info = h('p', { class: 'desc' });
+    app.appendChild(card(h('div', { class: 'cab' }, h('h2', null, 'Base 100 no início do intervalo'), seg), info, g,
+      h('p', { class: 'desc' }, 'Fechamentos mensais do Yahoo Finance. A ação usa o fechamento ajustado por proventos e desdobramentos; o Ibovespa já é um índice de retorno total. O início do intervalo muda bastante o resultado: vale olhar mais de um.'),
+      h('p', { class: 'desc' }, h('a', { href: '/ficha?t=' + encodeURIComponent(t) }, 'Abrir a ficha de ' + t))));
+    function desenhar() {
+      btns.forEach((b, i) => b.setAttribute('aria-pressed', String(opts[i][0] === per)));
+      const anos = { '1a': 1, '3a': 3, '5a': 5, '10a': 10 }[per];
+      let s = pts;
+      if (anos) { const lim = new Date(ultimo.d); lim.setFullYear(lim.getFullYear() - anos); s = pts.filter(p => p.d >= lim); }
+      if (s.length < 2) s = pts;
+      const v0 = s[0], idx = s.map(p => ({ d: p.d, a: 100 * p.a / v0.a, i: 100 * p.i / v0.i }));
+      const ra = ultimo.a / v0.a - 1, ri = ultimo.i / v0.i - 1;
+      info.textContent = '';
+      info.append('De ' + v0.mes.slice(5) + '/' + v0.mes.slice(0, 4) + ' a ' + ultimo.mes.slice(5) + '/' + ultimo.mes.slice(0, 4) + ': ' + t + ' ', h('b', { class: cls(ra) }, pctS(ra)), ' · Ibovespa ', h('b', { class: cls(ri) }, pctS(ri)), '.');
+      const linha = (nome, v, cor) => [nome, N0.format(v) + ' (' + pctS(v / 100 - 1) + ')', cor];
+      G.tempo(g, { pts: idx, series: [{ nome: t, key: 'a', cor: 'var(--s2)' }, { nome: 'Ibovespa', key: 'i', cor: 'var(--s1)' }], fmt: v => N0.format(v), ref: 100, zero: false, rotFinal: true, altura: 340,
+        tooltip: p => [linha(t, p.a, 'var(--s2)'), linha('Ibovespa', p.i, 'var(--s1)')] });
+    }
+    desenhar();
+  }
 
   // ---------- início ----------
   async function paginaInicio(q0) {

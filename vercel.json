@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/lista",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/comparar",
+      "destination": "/index.html"
+    },
+    {
       "source": "/ficha",
       "destination": "/index.html"
     },
