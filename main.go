@@ -28,7 +28,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.18.0"
+const versao = "1.19.0"
 
 var (
 	appDir  string
@@ -172,7 +172,7 @@ func main() {
 	static := http.FileServer(http.FS(sub))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
-		if p == "/" || p == "/lista" || p == "/ficha" || p == "/itr" || p == "/config" {
+		if p == "/" || p == "/lista" || p == "/comparar" || p == "/ficha" || p == "/itr" || p == "/config" {
 			w.Header().Set("Cache-Control", "no-store")
 			http.ServeFileFS(w, r, sub, "index.html")
 			return
@@ -192,6 +192,7 @@ func main() {
 	mux.HandleFunc("/api/fatos-relevantes", apiFatosRelevantes)
 	mux.HandleFunc("/api/cotacoes-diarias", apiCotacoesDiarias)
 	mux.HandleFunc("/api/lista-dia", apiListaDia)
+	mux.HandleFunc("/api/comparar", apiComparar)
 	mux.HandleFunc("/api/demonstrativos", apiDemonstrativos)
 	mux.HandleFunc("/demonstrativos/", servirDemonstrativo)
 	mux.HandleFunc("/api/itr", apiITR)
@@ -569,6 +570,36 @@ func servirDemonstrativo(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/pdf")
 	http.ServeFile(w, r, filepath.Join(appDir, "demonstrativos", partes[0], partes[1]))
+}
+
+// /api/comparar?t=VALE3: fechamento ajustado mensal da ação e o Ibovespa, nos meses em que os dois existem
+func apiComparar(w http.ResponseWriter, r *http.Request) {
+	t := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("t")))
+	if !reTickerPasta.MatchString(t) {
+		jsonErr(w, 400, "informe o código da ação, como VALE3")
+		return
+	}
+	acao, err := HistoricoYahoo(t)
+	if err != nil {
+		jsonErr(w, 404, t+": "+err.Error())
+		return
+	}
+	ibov, err := HistoricoYahoo("^BVSP")
+	if err != nil {
+		jsonErr(w, 502, "Ibovespa: "+err.Error())
+		return
+	}
+	ind := map[string]float64{}
+	for _, p := range ibov {
+		ind[p.Mes] = p.V
+	}
+	pts := []map[string]any{}
+	for _, p := range acao {
+		if v, ok := ind[p.Mes]; ok {
+			pts = append(pts, map[string]any{"mes": p.Mes, "acao": p.V, "ibov": v})
+		}
+	}
+	writeJSON(w, map[string]any{"ticker": t, "pontos": pts})
 }
 
 // /api/lista-dia: último fechamento e o anterior de cada companhia ativa, para a página Lista
