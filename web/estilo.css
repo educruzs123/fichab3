@@ -152,7 +152,8 @@ table.itr tr.forte td { font-weight: 600; }
 .cotacoes .linha { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--ln2); color: var(--tx); }
 .cotacoes .linha:last-child { border-bottom: 0; }
 .cotacoes .linha:hover { text-decoration: none; background: var(--ln2); }
-.cotacoes .logo { width: 42px; height: 42px; border-radius: 50%; background: var(--a3); color: var(--a); display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+.cotacoes .logo { position: relative; overflow: hidden; width: 42px; height: 42px; border-radius: 50%; background: var(--a3); color: var(--a); display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+.cotacoes .logo img { position: absolute; inset: 0; width: 100%; height: 100%; }
 .cotacoes b, .cotacoes small { display: block; }
 .cotacoes b { font-size: 16px; }
 .cotacoes small { font-size: 13px; color: var(--mu); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

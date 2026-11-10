@@ -103,7 +103,8 @@
       corpo.replaceChildren(...l.map(e => {
         const d = e.ant ? e.preco - e.ant : null;
         return h(e.indice ? 'div' : 'a', { class: 'linha', href: e.indice ? null : '/ficha?t=' + encodeURIComponent(e.ticker) }, // o índice não tem ficha
-          h('span', { class: 'logo', 'aria-hidden': 'true' }, e.ticker.slice(0, 2)),
+          // ícone da brapi por cima das duas letras; se não existir ou o serviço falhar, ficam as letras
+          h('span', { class: 'logo', 'aria-hidden': 'true' }, e.ticker.slice(0, 2), h('img', { src: 'https://icons.brapi.dev/icons/' + encodeURIComponent(e.ticker) + '.svg', alt: '', loading: 'lazy', onerror: ev => ev.target.remove() })),
           h('span', { class: 'quem' }, h('b', null, e.ticker), h('small', null, e.nome)),
           h('span', { class: 'num' }, h('b', null, N2.format(e.preco)),
             h('small', { class: d ? cls(d) : '' }, d == null ? '—' : sinal(d) + N2.format(Math.abs(d)) + ' ' + pctS(d / e.ant, 2))));
