@@ -1,4 +1,4 @@
-/* FichaB3Completa — páginas: início (lista), ficha, configuração. */
+/* FichaB3Completa — páginas: início (empresas), lista do dia, ficha, configuração. */
 (function () {
   'use strict';
   const app = document.getElementById('app');
@@ -78,11 +78,39 @@
 
   // ---------- roteador ----------
   const rota = location.pathname;
-  document.querySelectorAll('[data-nav]').forEach(a => { if ((rota === '/config' && a.dataset.nav === 'config') || (rota !== '/config' && a.dataset.nav === 'inicio' && rota === '/')) a.classList.add('ativo'); });
+  const nav = { '/': 'inicio', '/lista': 'lista', '/config': 'config' }[rota];
+  document.querySelectorAll('[data-nav]').forEach(a => { if (a.dataset.nav === nav) a.classList.add('ativo'); });
   if (rota === '/config') paginaConfig();
+  else if (rota === '/lista') paginaLista();
   else if (rota === '/ficha') paginaFicha(new URLSearchParams(location.search).get('t') || '');
   else if (rota === '/itr') paginaITR(new URLSearchParams(location.search).get('t') || '', new URLSearchParams(location.search).get('dt') || '');
   else paginaInicio(new URLSearchParams(location.search).get('q') || '');
+
+  // ---------- lista do dia ----------
+  async function paginaLista() {
+    document.title = 'FichaB3Completa — lista';
+    app.textContent = '';
+    const sub = h('p', { class: 'sub' }, 'Carregando…');
+    const corpo = h('div', { class: 'card cotacoes' });
+    app.append(h('p', { class: 'kicker' }, 'Cotações'), h('h1', null, 'Lista'), sub, corpo);
+    const sinal = v => v > 0 ? '+' : v < 0 ? '−' : '';
+    async function carregar() {
+      let l;
+      try { l = await api('/api/lista-dia'); } catch (e) { sub.textContent = ''; corpo.replaceChildren(aviso('erro', e.message)); return; }
+      const ult = l.reduce((m, e) => e.data > m ? e.data : m, '');
+      sub.textContent = `${l.filter(e => !e.indice).length} ações · fechamento de ${dataBR(ult)} contra o pregão anterior · atualizado às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+      corpo.replaceChildren(...l.map(e => {
+        const d = e.ant ? e.preco - e.ant : null;
+        return h(e.indice ? 'div' : 'a', { class: 'linha', href: e.indice ? null : '/ficha?t=' + encodeURIComponent(e.ticker) }, // o índice não tem ficha
+          h('span', { class: 'logo', 'aria-hidden': 'true' }, e.ticker.slice(0, 2)),
+          h('span', { class: 'quem' }, h('b', null, e.ticker), h('small', null, e.nome)),
+          h('span', { class: 'num' }, h('b', null, N2.format(e.preco)),
+            h('small', { class: d ? cls(d) : '' }, d == null ? '—' : sinal(d) + N2.format(Math.abs(d)) + ' ' + pctS(d / e.ant, 2))));
+      }));
+    }
+    await carregar();
+    setInterval(carregar, 5 * 60 * 1000); // o banco recebe o pregão ao longo do dia
+  }
 
   // ---------- início ----------
   async function paginaInicio(q0) {

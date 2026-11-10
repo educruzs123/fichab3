@@ -28,7 +28,7 @@ import (
 //go:embed web
 var webFS embed.FS
 
-const versao = "1.17.0"
+const versao = "1.18.0"
 
 var (
 	appDir  string
@@ -172,7 +172,7 @@ func main() {
 	static := http.FileServer(http.FS(sub))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
-		if p == "/" || p == "/ficha" || p == "/itr" || p == "/config" {
+		if p == "/" || p == "/lista" || p == "/ficha" || p == "/itr" || p == "/config" {
 			w.Header().Set("Cache-Control", "no-store")
 			http.ServeFileFS(w, r, sub, "index.html")
 			return
@@ -191,6 +191,7 @@ func main() {
 	mux.HandleFunc("/api/log-cotacoes", apiLogCotacoes)
 	mux.HandleFunc("/api/fatos-relevantes", apiFatosRelevantes)
 	mux.HandleFunc("/api/cotacoes-diarias", apiCotacoesDiarias)
+	mux.HandleFunc("/api/lista-dia", apiListaDia)
 	mux.HandleFunc("/api/demonstrativos", apiDemonstrativos)
 	mux.HandleFunc("/demonstrativos/", servirDemonstrativo)
 	mux.HandleFunc("/api/itr", apiITR)
@@ -568,6 +569,33 @@ func servirDemonstrativo(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/pdf")
 	http.ServeFile(w, r, filepath.Join(appDir, "demonstrativos", partes[0], partes[1]))
+}
+
+// /api/lista-dia: último fechamento e o anterior de cada companhia ativa, para a página Lista
+func apiListaDia(w http.ResponseWriter, r *http.Request) {
+	if !usaSupa() {
+		jsonErr(w, 409, "as cotações diárias só existem com a fonte Supabase")
+		return
+	}
+	l, err := fonteSupa().Lista(false)
+	if err == nil {
+		var fs map[string]Fechamento
+		if fs, err = fonteSupa().Fechamentos(); err == nil {
+			out := []map[string]any{}
+			// Ibovespa do Yahoo no topo; sem resposta, a lista segue só com as ações
+			if u := UltimaCotacao("^BVSP", false); u != nil {
+				out = append(out, map[string]any{"ticker": "IBOV", "nome": "Índice Ibovespa", "data": u.Data, "preco": u.Preco, "ant": u.Anterior, "indice": true})
+			}
+			for _, e := range l { // já em ordem de ticker
+				if f, ok := fs[e.Tickers[0]]; ok && e.Ativa {
+					out = append(out, map[string]any{"ticker": e.Tickers[0], "nome": e.Nome, "data": f.Data, "preco": f.Preco, "ant": f.Ant})
+				}
+			}
+			writeJSON(w, out)
+			return
+		}
+	}
+	jsonErr(w, 502, err.Error())
 }
 
 func apiCotacoesDiarias(w http.ResponseWriter, r *http.Request) {

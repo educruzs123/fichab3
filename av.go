@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -180,7 +181,11 @@ func UltimaCotacao(ticker string, forcar bool) *UltimaCot {
 		return c
 	}
 	n := &UltimaCot{em: time.Now()}
-	req, _ := http.NewRequest("GET", "https://query1.finance.yahoo.com/v8/finance/chart/"+url.PathEscape(ticker)+".SA?range=1d&interval=1d", nil)
+	simbolo := ticker + ".SA"
+	if strings.HasPrefix(ticker, "^") { // índice (^BVSP): o Yahoo não usa o sufixo da bolsa
+		simbolo = ticker
+	}
+	req, _ := http.NewRequest("GET", "https://query1.finance.yahoo.com/v8/finance/chart/"+url.PathEscape(simbolo)+"?range=1d&interval=1d", nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	cli := &http.Client{Timeout: 5 * time.Second}
 	if resp, err := cli.Do(req); err == nil {
