@@ -378,7 +378,8 @@
 
     // cabeçalho
     app.appendChild(h('p', { class: 'kicker' }, [f.setor, f.tipo, f.ativa ? null : 'cancelada na CVM'].filter(Boolean).join(' · ')));
-    app.appendChild(h('h1', null, (f.nome_curto || f.empresa) + ' · ' + f.ticker));
+    // logo da brapi ao lado do nome; se não existir ou o serviço falhar, o título fica só com o texto
+    app.appendChild(h('h1', null, h('img', { class: 'logo-ficha', src: 'https://icons.brapi.dev/icons/' + encodeURIComponent(f.ticker) + '.svg', alt: '', onerror: ev => ev.target.remove() }), (f.nome_curto || f.empresa) + ' · ' + f.ticker));
     app.appendChild(h('p', { class: 'sub' }, h('span', { class: 'chips' }, f.tickers.map(x => h('a', { class: x === f.ticker ? 'chip' : 'chip cinza', href: '/ficha?t=' + x }, x))), '  ',
       `${f.empresa} · CNPJ ${f.cnpj} · DFP até ${f.ult_dfp} · trimestres até ${f.ult_tri || '—'}` + (at.cotacao_data ? ` · cotação de ${dataBR(at.cotacao_data)}` + (at.cotacao_hora ? ` às ${at.cotacao_hora} (Yahoo Finance)` : '') : '')));
     const barra = h('div', { class: 'acoes noprint', style: 'margin:-6px 0 18px' },

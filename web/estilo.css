@@ -158,3 +158,5 @@ table.itr tr.forte td { font-weight: 600; }
 .cotacoes b { font-size: 16px; }
 .cotacoes small { font-size: 13px; color: var(--mu); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cotacoes small.up { color: var(--ok); } .cotacoes small.down { color: var(--bad); }
+.logo-ficha { width: 40px; height: 40px; border-radius: 50%; vertical-align: -8px; margin-right: 12px; }
+@media print { .logo-ficha { display: none; } }
